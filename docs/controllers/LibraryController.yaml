@@ -478,3 +478,88 @@ paths:
                 $ref: '../objects/entities/Series.yaml#/components/schemas/seriesWithProgressAndRSS'
         '404':
           $ref: '#/components/responses/library404'
+  /api/libraries/{id}/search:
+    parameters:
+      - name: id
+        in: path
+        description: The ID of the library.
+        required: true
+        schema:
+          $ref: '../objects/Library.yaml#/components/schemas/libraryId'
+    get:
+        operationId: searchLibrary
+        summary: Search library
+        description: Search library by ID on server.
+        tags:
+            - Libraries
+        parameters:
+          - name: q
+            in: query
+            description: The search query.
+            required: true
+            schema:
+              type: string
+          - $ref: '#/components/parameters/limit'
+        responses:
+          '200':
+            description: searchLibrary OK
+            content:
+              application/json:
+                schema:
+                    type: object
+                    properties:
+                      book:
+                        type: array
+                        nullable: true
+                        items:
+                          $ref: '../objects/LibraryItem.yaml#/components/schemas/libraryItemSearchResult'
+                      podcast:
+                        type: array
+                        nullable: true
+                        description: TODO. Add podcast to libraryItemExpanded/media - try without oneOf
+                        items:
+                          $ref: '../objects/LibraryItem.yaml#/components/schemas/libraryItemSearchResult'
+                      tags:
+                        type: array
+                        items:
+                          type: string
+                      authors:
+                        type: array
+                        items:
+                          $ref: '../objects/entities/Author.yaml#/components/schemas/authorExpanded'
+                      series:
+                        type: array
+                        items:
+                          $ref: '../objects/entities/Series.yaml#/components/schemas/seriesBooks'
+          '400':
+            description: No search query provided.
+            content:
+              text/html:
+                schema:
+                  type: string
+                  example: Bad Request
+          '404':
+            $ref: '#/components/responses/library404'
+  /api/libraries/{id}/filterdata:
+    parameters:
+      - name: id
+        in: path
+        description: The ID of the library.
+        required: true
+        schema:
+          $ref: '../objects/Library.yaml#/components/schemas/libraryId'
+    get:
+      operationId: getLibraryFilterData
+      summary: Get filter data for library
+      description: Get filter data for library by ID on server.
+      tags:
+        - Libraries
+      responses:
+        '200':
+          description: getLibraryFilterData OK
+          content:
+            application/json:
+              schema:
+                $ref: '../objects/LibraryItem.yaml#/components/schemas/libraryFilterData'
+        '404':
+          $ref: '#/components/responses/library404'

@@ -81,4 +81,18 @@ components:
           properties:
             metadata:
               $ref: '../metadata/BookMetadata.yaml#/components/schemas/bookMetadata'
-
+    bookExpanded:
+      allOf:
+          - $ref: '#/components/schemas/bookBase'
+          - type: object
+            properties:
+              duration:
+                $ref: '../../schemas.yaml#/components/schemas/durationSec'
+              size:
+                $ref: '../../schemas.yaml#/components/schemas/size'
+              tracks:
+                type: array
+                items:
+                  $ref: '../files/AudioTrack.yaml#/components/schemas/AudioTrack'
+              metadata:
+                $ref: '../metadata/BookMetadata.yaml#/components/schemas/bookMetadataExpanded'

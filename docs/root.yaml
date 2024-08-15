@@ -111,6 +111,10 @@ paths:
     $ref: './controllers/SessionController.yaml#/paths/~1api~1session~1local'
   /api/local/session/local-all:
     $ref: './controllers/SessionController.yaml#/paths/~1api~1local~1session~1local-all'
+  /api/libraries/{id}/search:
+    $ref: './controllers/LibraryController.yaml#/paths/~1api~1libraries~1{id}~1search'
+  /api/libraries/{id}/filterdata:
+    $ref: './controllers/LibraryController.yaml#/paths/~1api~1libraries~1{id}~1filterdata'
 tags:
   - name: Authors
     description: Author endpoints

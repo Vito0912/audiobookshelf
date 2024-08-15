@@ -1,5 +1,24 @@
 components:
   schemas:
+    titleIgnorePrefix:
+      description: The title of the book with any prefix moved to the end.
+      type: string
+    authorName:
+      description: The name of the book's author(s).
+      type: string
+      example: Terry Goodkind
+    authorNameLF:
+      description: The name of the book's author(s) with last names first.
+      type: string
+      example: Goodkind, Terry
+    narratorName:
+      description: The name of the audiobook's narrator(s).
+      type: string
+      example: Sam Tsoutsouvas
+    seriesName:
+      description: The name of the book's series.
+      type: string
+      example: Sword of Truth
     narrators:
       description: The narrators of the audiobook.
       type: array
@@ -76,24 +95,15 @@ components:
         - type: object
           properties:
             titleIgnorePrefix:
-              description: The title of the book with any prefix moved to the end.
-              type: string
+              $ref: '#/components/schemas/titleIgnorePrefix'
             authorName:
-              description: The name of the book's author(s).
-              type: string
-              example: Terry Goodkind
+              $ref: '#/components/schemas/authorName'
             authorNameLF:
-              description: The name of the book's author(s) with last names first.
-              type: string
-              example: Goodkind, Terry
+              $ref: '#/components/schemas/authorNameLF'
             narratorName:
-              description: The name of the audiobook's narrator(s).
-              type: string
-              example: Sam Tsoutsouvas
+              $ref: '#/components/schemas/narratorName'
             seriesName:
-              description: The name of the book's series.
-              type: string
-              example: Sword of Truth
+                $ref: '#/components/schemas/seriesName'
     bookChapter:
       type: object
       description: A book chapter. Includes the title and timestamps.
@@ -133,3 +143,18 @@ components:
               type: array
               items:
                 $ref: '../entities/Series.yaml#/components/schemas/seriesSequence'
+    bookMetadataExpanded:
+      allOf:
+        - $ref: '#/components/schemas/bookMetadataBase'
+        - type: object
+          properties:
+            titleIgnorePrefix:
+              $ref: '#/components/schemas/titleIgnorePrefix'
+            authorName:
+              $ref: '#/components/schemas/authorName'
+            authorNameLF:
+              $ref: '#/components/schemas/authorNameLF'
+            narratorName:
+              $ref: '#/components/schemas/narratorName'
+            seriesName:
+              $ref: '#/components/schemas/seriesName'

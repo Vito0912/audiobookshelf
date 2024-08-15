@@ -56,7 +56,14 @@ components:
         mediaType:
           $ref: './mediaTypes/media.yaml#/components/schemas/mediaType'
         media:
-          $ref: './mediaTypes/Book.yaml#/components/schemas/book'
+          oneOf:
+            - $ref: './mediaTypes/Book.yaml#/components/schemas/book'
+            - $ref: './mediaTypes/Podcast.yaml#/components/schemas/Podcast'
+          discriminator:
+            propertyName: mediaType
+            mapping:
+              book: './mediaTypes/Book.yaml#/components/schemas/book'
+              podcast: './mediaTypes/Podcast.yaml#/components/schemas/Podcast'
     libraryItemMinified:
       type: object
       description: A single item on the server, like a book or podcast. Minified media format.
@@ -86,3 +93,58 @@ components:
           properties:
             sequence:
               $ref: './entities/Series.yaml#/components/schemas/sequence'
+    libraryItemExpanded:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/libraryItemBase'
+        - type: object
+          properties:
+            size:
+              $ref: '../schemas.yaml#/components/schemas/size'
+            media:
+              oneOf:
+                - $ref: './mediaTypes/Book.yaml#/components/schemas/bookExpanded'
+                - $ref: './mediaTypes/Podcast.yaml#/components/schemas/Podcast'
+              discriminator:
+                propertyName: mediaType
+                mapping:
+                  book: './mediaTypes/Book.yaml#/components/schemas/bookExpanded'
+                  podcast: './mediaTypes/Podcast.yaml#/components/schemas/Podcast'
+    libraryItemSearchResult:
+      type: object
+      properties:
+        libraryItem:
+          $ref: '#/components/schemas/libraryItemExpanded'
+        matchKey:
+          nullable: true
+          type: string
+        matchText:
+          nullable: true
+          type: string
+    libraryFilterData:
+      type: object
+      properties:
+        authors:
+          type: array
+          items:
+            $ref: '../objects/entities/Author.yaml#/components/schemas/authorMinified'
+        series:
+          type: array
+          items:
+            $ref: '../objects/entities/Series.yaml#/components/schemas/seriesNumBooks'
+        tags:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+        narrators:
+          type: array
+          items:
+            type: string
+        languages:
+          type: array
+          items:
+            type: string
