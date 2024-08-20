@@ -102,3 +102,40 @@ components:
           $ref: '../schemas.yaml#/components/schemas/createdAt'
         lastUpdate:
           $ref: '../schemas.yaml#/components/schemas/updatedAt'
+    libraryShelf:
+      description: A library shelf
+      type: object
+      properties:
+        id:
+          description: The ID (Name) of the shelf.
+          type: string
+          example: 'continue-listening'
+        label:
+          description: The label of the shelf.
+          type: string
+          example: 'Continue Listening'
+        labelStringKey:
+          description: The localization key for the label.
+          type: string
+          example: 'LabelContinueListening'
+        type:
+          description: The type of items the shelf contains.
+          type: string
+          example: 'book'
+          enum:
+            - book
+            - podcast
+            - series
+            - authors
+            - episode
+        category:
+          description: The category of the shelf.
+          type: string
+          example: 'recentlyListened'
+        entities:
+          description: TODO! I use allOf, because of my programming language , buts a oneOf. It still works with allOf but you will have entries that are not always available.
+          type: array
+          items:
+            allOf:
+              - $ref: './LibraryItem.yaml#/components/schemas/libraryItemShelf'
+              - $ref: './entities/Series.yaml#/components/schemas/seriesShelf'

@@ -121,6 +121,36 @@ components:
         matchText:
           nullable: true
           type: string
+    libraryItemShelf:
+      type: object
+      description: A single episode of a podcast.
+      allOf:
+        - $ref: '#/components/schemas/libraryItem'
+        - type: object
+          properties:
+            recentEpisode:
+              $ref: './entities/PodcastEpisode.yaml#/components/schemas/PodcastEpisode'
+            progressLastUpdate:
+              description: An Integer, the time (in ms since POSIX epoch) when the book's or episode's progress was last updated.
+              type: integer
+              example: 1612345678901
+              nullable: true
+            prevBookInProgressLastUpdate:
+              description: An Integer, the time (in ms since POSIX epoch) when the book's or episode's progress was last updated.
+              type: integer
+              example: 1612345678901
+              nullable: true
+            recommended:
+              description:  A Float, the recommendation weight of the library item.
+              type: number
+              example: 0.5
+              nullable: true
+            finishedAt:
+              description: An Integer, the time (in ms since POSIX epoch) when the book or episode was finished.
+              type: integer
+              example: 1612345678901
+              nullable: true
+        - $ref: '../objects/entities/Series.yaml#/components/schemas/seriesShelf'
     libraryFilterData:
       type: object
       properties:

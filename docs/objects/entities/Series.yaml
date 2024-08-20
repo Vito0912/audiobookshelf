@@ -115,3 +115,33 @@ components:
               description: The RSS feed for the series.
               type: string
               example: 'TBD'
+    seriesShelf:
+
+      allOf:
+        - $ref: '#/components/schemas/series'
+        - type: object
+          nullable: true
+          properties:
+            books:
+              type: array
+              items:
+                $ref: '../LibraryItem.yaml#/components/schemas/libraryItemMinified'
+            inProgress:
+              type: boolean
+              description: Whether the user has started listening to the series.
+              nullable: true
+            hasActiveBook:
+              type: boolean
+              description: Whether the user has started listening to the series, but has not finished it.
+              nullable: true
+            hideFromContinueListening:
+              type: boolean
+              description: Whether the series should be hidden from the continue listening section.
+              nullable: true
+            bookInProgressLastUpdate:
+              description: An Integer, the time (in ms since POSIX epoch) when the book's progress was last updated.
+              type: integer
+              example: 1612345678901
+              nullable: true
+            firstBookUnread:
+              $ref: '../LibraryItem.yaml#/components/schemas/libraryItemMinified'

@@ -563,3 +563,34 @@ paths:
                 $ref: '../objects/LibraryItem.yaml#/components/schemas/libraryFilterData'
         '404':
           $ref: '#/components/responses/library404'
+  /api/libraries/{id}/personalized:
+    parameters:
+      - name: id
+        in: path
+        description: The ID of the library.
+        required: true
+        schema:
+          $ref: '../objects/Library.yaml#/components/schemas/libraryId'
+      - name: include
+        in: query
+        description: A comma separated list of what to include with the library item. The only current option is filterdata.
+        schema:
+          type: string
+      - $ref: '#/components/parameters/limit'
+    get:
+      operationId: getPersonalizedLibrary
+      summary: Get personalized library (home page).
+      description: Get personalized library (home page).
+      tags:
+        - Libraries
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../objects/Library.yaml#/components/schemas/libraryShelf'
+        '404':
+          $ref: '#/components/responses/library404'
