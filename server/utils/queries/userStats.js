@@ -65,12 +65,43 @@ module.exports = {
   },
 
   /**
+   *
+   * @param {string} userId
+   * @param {number} year YYYY
+   * @returns {Promise<MediaProgress[]>}
+   */
+  async getPodcastEpisodeMediaProgressFinishedForYear(userId, year) {
+    const progresses = await Database.mediaProgressModel.findAll({
+      where: {
+        userId,
+        mediaItemType: 'podcastEpisode',
+        finishedAt: {
+          [Sequelize.Op.gte]: `${year}-01-01`,
+          [Sequelize.Op.lt]: `${year + 1}-01-01`
+        }
+      },
+      include: {
+        model: Database.podcastEpisodeModel,
+        attributes: ['id', 'title'],
+        include: {
+          model: Database.podcastModel,
+          attributes: ['id']
+        },
+        required: true
+      },
+      order: Database.sequelize.random()
+    })
+    return progresses
+  },
+
+  /**
    * @param {string} userId
    * @param {number} year YYYY
    */
   async getStatsForYear(userId, year) {
     const listeningSessions = await this.getUserListeningSessionsForYear(userId, year)
     const bookProgressesFinished = await this.getBookMediaProgressFinishedForYear(userId, year)
+    const bookEpisodesFinished = await this.getPodcastEpisodeMediaProgressFinishedForYear(userId, year)
 
     let totalBookListeningTime = 0
     let totalPodcastListeningTime = 0
@@ -81,12 +112,15 @@ module.exports = {
     let narratorListeningMap = {}
     let monthListeningMap = {}
     let bookListeningMap = {}
+    let podcastListeningMap = {}
+    let episodeListeningMap = {}
 
     const booksWithCovers = []
     const finishedBooksWithCovers = []
 
     // Get finished book stats
     const numBooksFinished = bookProgressesFinished.length
+    const numEpisodesFinished = bookEpisodesFinished.length
     let longestAudiobookFinished = null
     for (const mediaProgress of bookProgressesFinished) {
       // Grab first 5 that have a cover
@@ -146,6 +180,20 @@ module.exports = {
           genreListeningMap[genre] += listeningSessionListeningTime
         })
       } else {
+        if (ls.displayTitle && !episodeListeningMap[ls.displayTitle]) {
+          episodeListeningMap[ls.displayTitle] = listeningSessionListeningTime
+        } else if (ls.displayTitle) {
+          episodeListeningMap[ls.displayTitle] += listeningSessionListeningTime
+        }
+
+        if(ls.mediaMetadata != null) {
+          if (ls.mediaMetadata.title && !podcastListeningMap[ls.mediaMetadata.title]) {
+            podcastListeningMap[ls.mediaMetadata.title] = listeningSessionListeningTime
+          } else if (ls.mediaMetadata.title) {
+            podcastListeningMap[ls.mediaMetadata.title] += listeningSessionListeningTime
+          }
+        }
+
         totalPodcastListeningTime += listeningSessionListeningTime
       }
     }
@@ -203,6 +251,9 @@ module.exports = {
       mostListenedMonth,
       numBooksFinished,
       numBooksListened: Object.keys(bookListeningMap).length,
+      numPodcastsListened: Object.keys(podcastListeningMap).length,
+      numEpisodesListened: Object.keys(episodeListeningMap).length,
+      numEpisodesFinished,
       longestAudiobookFinished,
       booksWithCovers,
       finishedBooksWithCovers
