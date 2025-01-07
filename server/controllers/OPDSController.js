@@ -52,7 +52,7 @@ class OPDSController {
    */
   async getLibrary(req, res) {
 
-    const limit = 1
+    const limit = 20
     const page = parseInt(req.query.page) || 0
 
     const payload = {

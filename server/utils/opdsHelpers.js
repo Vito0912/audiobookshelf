@@ -44,6 +44,11 @@ module.exports = {
           'type': 'application/atom+xml;profile=opds-catalog;kind=navigation',
           'href': req.originalUrl.replace(/&?page=\d+/, '')
         })
+        xml.ele('link', {
+          'rel': 'first',
+          'type': 'application/atom+xml;profile=opds-catalog;kind=navigation',
+          'href': req.originalUrl.replace(/&?page=\d+/, '')
+        })
         if (req.query.page && req.query.page > 0) {
           xml.ele('link', {
             'rel': 'previous',
