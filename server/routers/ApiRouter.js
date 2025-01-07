@@ -33,6 +33,7 @@ const RSSFeedController = require('../controllers/RSSFeedController')
 const CustomMetadataProviderController = require('../controllers/CustomMetadataProviderController')
 const MiscController = require('../controllers/MiscController')
 const ShareController = require('../controllers/ShareController')
+const OPDSController = require('../controllers/OPDSController')
 
 const { getTitleIgnorePrefix } = require('../utils/index')
 
@@ -264,6 +265,12 @@ class ApiRouter {
     this.router.delete('/notifications/:id', NotificationController.middleware.bind(this), NotificationController.deleteNotification.bind(this))
     this.router.patch('/notifications/:id', NotificationController.middleware.bind(this), NotificationController.updateNotification.bind(this))
     this.router.get('/notifications/:id/test', NotificationController.middleware.bind(this), NotificationController.sendNotificationTest.bind(this))
+
+    //
+    // OPDS
+    //
+    this.router.get('/opds', OPDSController.middleware.bind(this), OPDSController.get.bind(this))
+    this.router.get('/opds/libraries/:id', OPDSController.middleware.bind(this), OPDSController.getLibrary.bind(this))
 
     //
     // Email Routes (Admin and up)
