@@ -1,7 +1,8 @@
 const { Request, Response, NextFunction } = require('express')
 const Database = require('../Database')
 const Logger = require('../Logger')
-const { buildOPDSXMLSkeleton, buildLibraryEntries, buildItemEntries } = require('../utils/opdsHelpers')
+const { buildOPDSXMLSkeleton, buildLibraryEntries, buildItemEntries, buildSearchDefinition } = require('../utils/opdsHelpers')
+const libraryItemFilters = require('../utils/queries/libraryItemFilters')
 
 /**
  * @typedef RequestUserObject
@@ -36,7 +37,7 @@ class OPDSController {
     let entriesXML = buildLibraryEntries(libraries, req.user)
 
     // Use the first library or some default values if no libraries exist
-    const xml = buildOPDSXMLSkeleton('abs', 'Audiobookshelf', entriesXML)
+    const xml = buildOPDSXMLSkeleton('abs', 'Audiobookshelf', entriesXML, req)
     return res.type('application/xml').send(xml)
   }
 
@@ -51,11 +52,14 @@ class OPDSController {
    */
   async getLibrary(req, res) {
 
+    const limit = 1
+    const page = parseInt(req.query.page) || 0
+
     const payload = {
       results: [],
       total: undefined,
-      limit: 4,
-      page: req.query.page || 0,
+      limit: limit,
+      offset: page,
       sortBy: req.query.sort,
       sortDesc: false,
       filterBy: 'ebooks.ZWJvb2s%3D',
@@ -67,13 +71,54 @@ class OPDSController {
 
     const { libraryItems, count } = await Database.libraryItemModel.getByFilterAndSort(req.library, req.user, payload)
 
-    //return res.json({ libraryItems })
+    if ((limit * (page + 1)) < count) req.enableNext = true
 
     let entriesXML = buildItemEntries(libraryItems, req.user)
 
     // Use the first library or some default values if no libraries exist
-    const xml = buildOPDSXMLSkeleton(`urn:uuid:${req.library.id}`, req.library.name, entriesXML)
+    const xml = buildOPDSXMLSkeleton(`urn:uuid:${req.library.id}`, req.library.name, entriesXML, req)
     return res.type('application/xml').send(xml)
+  }
+
+  /**
+   * GET: /api/opds/libraries/:id/search
+   *
+   *
+   * @this {import('../routers/ApiRouter')}
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async search(req, res) {
+    if (!req.query.q || typeof req.query.q !== 'string') {
+      return res.status(400).send('Invalid request. Query param "q" must be a string')
+    }
+
+    const limit = req.query.limit || 20 //
+    const query = req.query.q.trim()
+
+    const matches = await libraryItemFilters.search(req.user, req.library, query, limit)
+
+    // Map a list of [{'libraryItem':...},{'libraryItem':...}] to [..., ...]
+    const bookMatches = matches['book'].map((el) => el.libraryItem)
+
+    const entriesXML = buildItemEntries(bookMatches, req.user)
+
+    // Use the first library or some default values if no libraries exist
+    const xml = buildOPDSXMLSkeleton(`urn:uuid:${req.library.id}`, `${req.library.name} - ${query}`, entriesXML, req)
+    return res.type('application/xml').send(xml)
+  }
+
+  /**
+   * GET: /api/opds/libraries/:id/search-definition
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   *
+   * @returns {Response}
+   */
+  searchDefinition(req, res) {
+    return res.type('application/xml').send(buildSearchDefinition(req))
   }
 
   /**

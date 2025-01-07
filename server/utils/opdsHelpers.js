@@ -1,13 +1,66 @@
 const builder = require('xmlbuilder');
 
 module.exports = {
-  buildOPDSXMLSkeleton(id, title, entriesXML) {
+
+  /**
+   * @param {string} id
+   * @param {string} title
+   * @param {string[]} entriesXML
+   * @param {RequestWithUser} req
+   *
+   * @returns {string}
+   */
+
+  buildOPDSXMLSkeleton(id, title, entriesXML, req) {
 
     const xml = builder.create('feed', { version: '1.0', encoding: 'UTF-8' })
       .att('xmlns', 'http://www.w3.org/2005/Atom')
+      .att('xmlns:opds', 'http://opds-spec.org/2010/catalog')
+      .att('xmlns:dcterms', 'http://purl.org/dc/terms/')
+      .att('xmlns:opensearch', 'http://a9.com/-/spec/opensearch/1.1/')
       .ele('id', id).up()
       .ele('title', title).up()
       .ele('updated', new Date().toISOString()).up();
+
+    if(req.library && req.library.id) {
+      xml.ele('link', {
+        'rel': 'alternate',
+        'type': 'text/html',
+        'title': 'Web Interface',
+        'href': `/library/${req.library.id}`
+      })
+
+      if(req.user) {
+        // Search
+        xml.ele('link', {
+          'rel': 'search',
+          'type': 'application/opensearchdescription+xml',
+          'title': 'Search this library',
+          'href': `/api/opds/libraries/${req.library.id}/search-definition?token=${req.user.token}`
+        })
+        // Pagination
+        xml.ele('link', {
+          'rel': 'start',
+          'type': 'application/atom+xml;profile=opds-catalog;kind=navigation',
+          'href': req.originalUrl.replace(/&?page=\d+/, '')
+        })
+        if (req.query.page && req.query.page > 0) {
+          xml.ele('link', {
+            'rel': 'previous',
+            'type': 'application/atom+xml; profile=opds-catalog; kind=acquisition',
+            'href': req.originalUrl.replace(/&?page=\d+/, '') + (((req.query.page - 1) >= 1) ? `&page=${req.query.page - 1}` : '')
+          })
+        }
+        // Next page
+        if(req.enableNext) {
+          xml.ele('link', {
+            'rel': 'next',
+            'type': 'application/atom+xml; profile=opds-catalog; kind=acquisition',
+            'href': req.originalUrl.replace(/&?page=\d+/, '') + (req.query.page ? `&page=${parseInt(req.query.page) + 1}` : '&page=1')
+          })
+        }
+      }
+    }
 
     // If there are entries, append them using raw
     if (entriesXML && entriesXML.length > 0) {
@@ -59,5 +112,23 @@ module.exports = {
       return xml.end({ pretty: true });
 
     });
+  },
+
+
+  /**
+   * @param {RequestWithUser} req
+   *
+   * @returns {string}
+   */
+  buildSearchDefinition(req) {
+    return builder.create('OpenSearchDescription', { version: '1.0', encoding: 'UTF-8' })
+      .ele('ShortName', 'ABS').up()
+      .ele('LongName', 'Audiobookshelf').up()
+      .ele('Description', 'Search for books in Audiobookshelf').up()
+      .ele('Url', {
+        'type': 'application/atom+xml',
+        'template': `/api/opds/libraries/${req.library.id}/search?q={searchTerms}&token=${req.user.token}`
+      }).up()
+      .end({ pretty: true });
   }
 };

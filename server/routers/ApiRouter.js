@@ -271,6 +271,8 @@ class ApiRouter {
     //
     this.router.get('/opds', OPDSController.middleware.bind(this), OPDSController.get.bind(this))
     this.router.get('/opds/libraries/:id', OPDSController.middleware.bind(this), OPDSController.getLibrary.bind(this))
+    this.router.get('/opds/libraries/:id/search', OPDSController.middleware.bind(this), OPDSController.search.bind(this))
+    this.router.get('/opds/libraries/:id/search-definition', OPDSController.middleware.bind(this), OPDSController.searchDefinition.bind(this))
 
     //
     // Email Routes (Admin and up)
