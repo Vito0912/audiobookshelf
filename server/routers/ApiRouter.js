@@ -33,8 +33,7 @@ const RSSFeedController = require('../controllers/RSSFeedController')
 const CustomMetadataProviderController = require('../controllers/CustomMetadataProviderController')
 const MiscController = require('../controllers/MiscController')
 const ShareController = require('../controllers/ShareController')
-
-const { getTitleIgnorePrefix } = require('../utils/index')
+const StatsController = require('../controllers/StatsController')
 
 class ApiRouter {
   constructor(Server) {
@@ -94,6 +93,7 @@ class ApiRouter {
     this.router.post('/libraries/order', LibraryController.reorder.bind(this))
     this.router.post('/libraries/:id/remove-metadata', LibraryController.middleware.bind(this), LibraryController.removeAllMetadataFiles.bind(this))
     this.router.get('/libraries/:id/podcast-titles', LibraryController.middleware.bind(this), LibraryController.getPodcastTitles.bind(this))
+    this.router.get('/libraries/:id/download', LibraryController.middleware.bind(this), LibraryController.downloadMultiple.bind(this))
 
     //
     // Item Routes
@@ -320,6 +320,12 @@ class ApiRouter {
     this.router.delete('/share/mediaitem/:id', ShareController.deleteMediaItemShare.bind(this))
 
     //
+    // Stats Routes
+    //
+    this.router.get('/stats/year/:year', StatsController.middleware.bind(this), StatsController.getAdminStatsForYear.bind(this))
+    this.router.get('/stats/server', StatsController.middleware.bind(this), StatsController.getServerStats.bind(this))
+
+    //
     // Misc Routes
     //
     this.router.post('/upload', MiscController.handleUpload.bind(this))
@@ -337,7 +343,6 @@ class ApiRouter {
     this.router.get('/auth-settings', MiscController.getAuthSettings.bind(this))
     this.router.patch('/auth-settings', MiscController.updateAuthSettings.bind(this))
     this.router.post('/watcher/update', MiscController.updateWatchedPath.bind(this))
-    this.router.get('/stats/year/:year', MiscController.getAdminStatsForYear.bind(this))
     this.router.get('/logger-data', MiscController.getLoggerData.bind(this))
   }
 
