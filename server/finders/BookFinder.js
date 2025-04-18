@@ -9,6 +9,7 @@ const CustomProviderAdapter = require('../providers/CustomProviderAdapter')
 const Logger = require('../Logger')
 const { levenshteinDistance, escapeRegExp } = require('../utils/index')
 const htmlSanitizer = require('../utils/htmlSanitizer')
+const MusicBrainz = require('../providers/MusicBrainz')
 
 class BookFinder {
   #providerResponseTimeout = 30000
@@ -21,9 +22,10 @@ class BookFinder {
     this.audnexus = new Audnexus()
     this.fantLab = new FantLab()
     this.audiobookCovers = new AudiobookCovers()
+    this.musicbrainz = new MusicBrainz()
     this.customProviderAdapter = new CustomProviderAdapter()
 
-    this.providers = ['google', 'itunes', 'openlibrary', 'fantlab', 'audiobookcovers', 'audible', 'audible.ca', 'audible.uk', 'audible.au', 'audible.fr', 'audible.de', 'audible.jp', 'audible.it', 'audible.in', 'audible.es']
+    this.providers = ['google', 'itunes', 'openlibrary', 'fantlab', 'audiobookcovers', 'audible', 'audible.ca', 'audible.uk', 'audible.au', 'audible.fr', 'audible.de', 'audible.jp', 'audible.it', 'audible.in', 'audible.es', 'musicbrainz']
 
     this.verbose = false
   }
@@ -192,6 +194,13 @@ class BookFinder {
     if (this.verbose) Logger.debug(`Audible Book Search Results: ${books.length || 0}`)
     if (!books) return []
     return books
+  }
+
+  /**
+   *
+   */
+  async getMusicBrainzResults(title, author) {
+    return this.musicbrainz.searchTrack(title, author)
   }
 
   /**
@@ -461,6 +470,8 @@ class BookFinder {
       books = await this.getFantLabResults(title, author)
     } else if (provider === 'audiobookcovers') {
       books = await this.getAudiobookCoversResults(title)
+    } else if (provider === 'musicbrainz') {
+      books = await this.getMusicBrainzResults(title, author)
     } else {
       books = await this.getGoogleBooksResults(title, author)
     }

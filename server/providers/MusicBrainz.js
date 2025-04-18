@@ -11,28 +11,13 @@ class MusicBrainz {
   }
 
   // https://musicbrainz.org/doc/MusicBrainz_API/Search
-  searchTrack(options) {
-    let luceneParts = []
-    if (options.artist) {
-      luceneParts.push(`artist:${options.artist}`)
-    }
-    if (options.isrc) {
-      luceneParts.push(`isrc:${options.isrc}`)
-    }
-    if (options.title) {
-      luceneParts.push(`recording:${options.title}`)
-    }
-    if (options.album) {
-      luceneParts.push(`release:${options.album}`)
-    }
-    if (!luceneParts.length) {
-      Logger.error(`[MusicBrainz] Invalid search options - must have at least one of artist, isrc, title, album`)
-      return []
-    }
+  searchTrack(title, author) {
+    let luceneParts = [`${title}`, 'type:Audiobook']
+
 
     const query = {
       query: luceneParts.join(' AND '),
-      limit: isNullOrNaN(options.limit) ? 15 : Number(options.limit),
+      limit: 10,
       fmt: 'json'
     }
     const config = {
@@ -40,8 +25,20 @@ class MusicBrainz {
         'User-Agent': this.userAgentString
       }
     }
-    return axios.get('https://musicbrainz.org/ws/2/recording', { params: query }, config).then((response) => {
-      return response.data.recordings || []
+
+    Logger.debug(`[MusicBrainz] Search query: ${JSON.stringify(query)}`)
+
+    return axios.get('https://musicbrainz.org/ws/2/release-group', { params: query, }, config).then((response) => {
+      console.dir(response.data, { depth: null });
+
+      return response.data['release-groups'].map((recording) => {
+        return {
+          title: recording.title,
+          author: recording['artist-credit'] !== undefined ? recording['artist-credit'].filter((artist) => artist['joinphrase']).map((artist) => artist.name).join(', ') : null,
+          narrator: recording['artist-credit'] !== undefined ? recording['artist-credit'].filter((artist) => !artist['joinphrase']).map((artist) => artist.name).join(', ') : null,
+          duration: recording['length'] !== undefined ? recording['length'] : null,
+        }
+      })
     }).catch((error) => {
       Logger.error(`[MusicBrainz] search request error`, error)
       return []
