@@ -473,5 +473,162 @@ class MeController {
     const data = await userStats.getStatsForYear(req.user.id, year)
     res.json(data)
   }
+
+  /**
+   * GET: /api/me/badges
+   * Returns badge style aggregate stats for current user only
+   *
+   * @this import('../routers/ApiRouter')
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async getBadges(req, res) {
+    try {
+      const bookmarksCount = Array.isArray(req.user.bookmarks) ? req.user.bookmarks.length : 0
+
+      const finishedProgresses = (req.user.mediaProgresses || []).filter((mp) => mp.isFinished)
+      const numItemsFinished = finishedProgresses.length
+      let longestItemFinished = null
+      for (const mp of finishedProgresses) {
+        if (!mp.duration) continue
+        if (!longestItemFinished || mp.duration > longestItemFinished.duration) {
+          longestItemFinished = {
+            mediaProgressId: mp.id,
+            mediaItemId: mp.mediaItemId,
+            mediaItemType: mp.mediaItemType,
+            libraryItemId: mp.extraData?.libraryItemId || null,
+            duration: Math.round(mp.duration),
+            finishedAt: mp.finishedAt ? mp.finishedAt.valueOf() : null
+          }
+        }
+      }
+
+      const sessions = await this.getUserListeningSessionsHelper(req.user.id)
+
+      let longestSession = null
+      for (const s of sessions) {
+        const tl = s.timeListening || 0
+        if (!longestSession || tl > longestSession.timeListening) {
+          longestSession = {
+            id: s.id,
+            libraryItemId: s.libraryItemId,
+            mediaItemId: s.bookId || s.episodeId || null,
+            mediaType: s.mediaType,
+            timeListening: tl,
+            date: s.date,
+            updatedAt: s.updatedAt
+          }
+        }
+      }
+
+      const bookStartCounts = {}
+      sessions.forEach((s) => {
+        if (s.mediaType === 'book' && (s.startTime === 0 || s.startTime === null || s.startTime === undefined)) {
+          const lid = s.libraryItemId
+          if (!lid) return
+          bookStartCounts[lid] = (bookStartCounts[lid] || 0) + 1
+        }
+      })
+      let maxStartsSameBook = null
+      Object.keys(bookStartCounts).forEach((lid) => {
+        const count = bookStartCounts[lid]
+        if (!maxStartsSameBook || count > maxStartsSameBook.count) {
+          maxStartsSameBook = { libraryItemId: lid, count }
+        }
+      })
+
+      const uniqueDates = [...new Set(sessions.map((s) => s.date).filter(Boolean))].sort()
+      let maxConsecutiveDays = { days: 0, startDate: null, endDate: null }
+      let streakStart = null
+      let prevDateVal = null
+      const oneDayMs = 24 * 60 * 60 * 1000
+      for (const d of uniqueDates) {
+        const dateVal = new Date(d + 'T00:00:00Z').valueOf()
+        if (streakStart === null) {
+          streakStart = dateVal
+          prevDateVal = dateVal
+        } else if (dateVal - prevDateVal === oneDayMs) {
+          prevDateVal = dateVal
+        } else if (dateVal === prevDateVal) {
+        } else {
+          const days = Math.round((prevDateVal - streakStart) / oneDayMs) + 1
+          days > maxConsecutiveDays.days && (maxConsecutiveDays = { days, startDate: new Date(streakStart).toISOString().slice(0, 10), endDate: new Date(prevDateVal).toISOString().slice(0, 10) })
+          streakStart = dateVal
+          prevDateVal = dateVal
+        }
+      }
+      if (streakStart !== null) {
+        const days = Math.round((prevDateVal - streakStart) / oneDayMs) + 1
+        if (days > maxConsecutiveDays.days) {
+          maxConsecutiveDays = { days, startDate: new Date(streakStart).toISOString().slice(0, 10), endDate: new Date(prevDateVal).toISOString().slice(0, 10) }
+        }
+      }
+      if (maxConsecutiveDays.days === 0) maxConsecutiveDays = null
+
+      const sessionsWithDate = sessions.filter((s) => s.date).map((s) => ({ ...s, _dateVal: new Date(s.date + 'T00:00:00Z').valueOf() }))
+      sessionsWithDate.sort((a, b) => a._dateVal - b._dateVal)
+
+      let windowBookBest = null
+      let windowListeningBest = null
+      let left = 0
+      const bookCountsInWindow = {}
+      let totalListeningInWindow = 0
+      for (let right = 0; right < sessionsWithDate.length; right++) {
+        const rs = sessionsWithDate[right]
+        if (rs.mediaType === 'book' && rs.libraryItemId) {
+          bookCountsInWindow[rs.libraryItemId] = (bookCountsInWindow[rs.libraryItemId] || 0) + 1
+        }
+        totalListeningInWindow += rs.timeListening || 0
+        while (sessionsWithDate[right]._dateVal - sessionsWithDate[left]._dateVal > 6 * oneDayMs) {
+          const ls = sessionsWithDate[left]
+          if (ls.mediaType === 'book' && ls.libraryItemId) {
+            bookCountsInWindow[ls.libraryItemId] -= 1
+            if (bookCountsInWindow[ls.libraryItemId] <= 0) delete bookCountsInWindow[ls.libraryItemId]
+          }
+          totalListeningInWindow -= ls.timeListening || 0
+          left++
+        }
+
+        const uniqueBooks = Object.keys(bookCountsInWindow).length
+        const startDate = new Date(sessionsWithDate[left]._dateVal).toISOString().slice(0, 10)
+        const endDate = new Date(rs._dateVal).toISOString().slice(0, 10)
+        if (!windowBookBest || uniqueBooks > windowBookBest.uniqueBooks) {
+          windowBookBest = { uniqueBooks, startDate, endDate }
+        }
+        if (!windowListeningBest || totalListeningInWindow > windowListeningBest.totalListeningTime) {
+          windowListeningBest = { totalListeningTime: Math.round(totalListeningInWindow), startDate, endDate }
+        }
+      }
+
+      let totalAccessibleLibraryItems = 0
+      try {
+        if (req.user.permissions?.accessAllLibraries) {
+          totalAccessibleLibraryItems = await Database.libraryItemModel.count()
+        } else {
+          const librariesAccessible = req.user.permissions?.librariesAccessible || []
+          if (librariesAccessible.length) {
+            totalAccessibleLibraryItems = await Database.libraryItemModel.count({ where: { libraryId: librariesAccessible } })
+          } else {
+            totalAccessibleLibraryItems = 0
+          }
+        }
+      } catch (err) {}
+
+      res.json({
+        bookmarks: bookmarksCount,
+        numItemsFinished,
+        longestItemFinished,
+        longestSession,
+        maxStartsSameBook,
+        maxConsecutiveDays,
+        longestSevenDayWindowBooks: windowBookBest,
+        longestSevenDayWindowListening: windowListeningBest,
+        totalAccessibleLibraryItems
+      })
+    } catch (error) {
+      Logger.error(`[MeController] getBadges error: ${error.message}`)
+      res.status(500).send('Failed to compute badges')
+    }
+  }
 }
 module.exports = new MeController()

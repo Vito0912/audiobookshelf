@@ -18,6 +18,11 @@
         </div>
 
         <div class="w-full h-px bg-white/10 my-4" />
+        <div class="py-2 flex">
+          <ui-btn color="bg-primary" class="flex items-center" @click="$router.push('/account/badges')">
+            <span class="material-symbols mr-2 icon-text">military_tech</span>{{ $strings?.LabelBadges || 'Badges' }}
+          </ui-btn>
+        </div>
 
         <p v-if="showChangePasswordForm" class="mb-4 text-lg">{{ $strings.HeaderChangePassword }}</p>
         <form v-if="showChangePasswordForm" @submit.prevent="submitChangePassword">
