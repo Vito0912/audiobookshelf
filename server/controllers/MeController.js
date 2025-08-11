@@ -614,7 +614,42 @@ class MeController {
         }
       } catch (err) {}
 
-      res.json({
+      const dayTotals = {}
+      sessions.forEach((s) => {
+        if (s.date) {
+          dayTotals[s.date] = (dayTotals[s.date] || 0) + (s.timeListening || 0)
+        }
+      })
+      let bestMarathonDay = null
+      Object.keys(dayTotals).forEach((d) => {
+        const val = dayTotals[d]
+        if (!bestMarathonDay || val > bestMarathonDay.timeListening) {
+          bestMarathonDay = { date: d, timeListening: val }
+        }
+      })
+
+      const weekMap = {}
+      function getISOWeekKey(dateStr) {
+        const dt = new Date(dateStr + 'T00:00:00Z')
+        const dayNum = ((dt.getUTCDay() + 6) % 7) + 1
+        const thursday = new Date(dt)
+        thursday.setUTCDate(dt.getUTCDate() + (4 - dayNum))
+        const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1))
+        const weekNum = Math.floor(((thursday - yearStart) / 86400000 + 10) / 7)
+        return `${thursday.getUTCFullYear()}-W${weekNum}`
+      }
+      const dateActiveSet = new Set(uniqueDates)
+      dateActiveSet.forEach((d) => {
+        const key = getISOWeekKey(d)
+        if (!weekMap[key]) weekMap[key] = { days: 0 }
+        weekMap[key].days += 1
+      })
+      let weeksWithFourPlus = 0
+      Object.values(weekMap).forEach((w) => {
+        if (w.days >= 4) weeksWithFourPlus++
+      })
+
+      const responsePayload = {
         bookmarks: bookmarksCount,
         numItemsFinished,
         longestItemFinished,
@@ -623,8 +658,12 @@ class MeController {
         maxConsecutiveDays,
         longestSevenDayWindowBooks: windowBookBest,
         longestSevenDayWindowListening: windowListeningBest,
-        totalAccessibleLibraryItems
-      })
+        totalAccessibleLibraryItems,
+        bestMarathonDay,
+        weeklyConsistencyWeeks: weeksWithFourPlus
+      }
+
+      return res.json(responsePayload)
     } catch (error) {
       Logger.error(`[MeController] getBadges error: ${error.message}`)
       res.status(500).send('Failed to compute badges')
