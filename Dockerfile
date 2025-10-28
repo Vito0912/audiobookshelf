@@ -25,7 +25,7 @@ RUN apk add --no-cache --update \
   unzip
 
 WORKDIR /server
-COPY index.js package* /server
+COPY index.js package* tsconfig*.json /server/
 COPY /server /server/server
 
 RUN case "$TARGETPLATFORM" in \
@@ -38,7 +38,12 @@ RUN case "$TARGETPLATFORM" in \
   unzip /tmp/library.zip -d $NUSQLITE3_DIR && \
   rm /tmp/library.zip
 
-RUN npm ci --only=production
+# Install all dependencies (including TypeScript devDependencies) and build
+RUN npm ci
+RUN npm run build:ts
+
+# Remove devDependencies after TypeScript build
+RUN npm prune --production
 
 ### STAGE 2: Create minimal runtime image ###
 FROM node:20-alpine

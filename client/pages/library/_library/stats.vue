@@ -5,6 +5,89 @@
       <div class="w-full max-w-4xl mx-auto">
         <stats-preview-icons v-if="totalItems" :library-stats="libraryStats" />
 
+        <!-- TypeScript Demo Section -->
+        <div v-if="typeScriptStats" class="mt-8 bg-primary border-2 border-yellow-400/50 rounded-lg p-6">
+          <div class="flex items-center mb-4">
+            <h1 class="text-2xl font-bold">TypeScript Advanced Statistics</h1>
+            <div class="ml-3 px-3 py-1 bg-yellow-400 text-black text-xs font-bold rounded">TS</div>
+          </div>
+          <p class="text-gray-300 text-sm mb-4">
+            {{ typeScriptStats.message }}
+          </p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Duration Stats -->
+            <div class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Total Duration</div>
+              <div class="text-white text-2xl font-bold">{{ typeScriptStats.stats.totalDurationFormatted }}</div>
+              <div class="text-gray-400 text-xs mt-2">Average: {{ typeScriptStats.stats.averageDurationFormatted }}</div>
+            </div>
+
+            <!-- Size Stats -->
+            <div class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Total Size</div>
+              <div class="text-white text-2xl font-bold">{{ typeScriptStats.stats.totalSizeFormatted }}</div>
+              <div class="text-gray-400 text-xs mt-2">Average: {{ typeScriptStats.stats.averageSizeFormatted }}</div>
+            </div>
+
+            <!-- Items Stats -->
+            <div class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Library Items</div>
+              <div class="text-white text-2xl font-bold">{{ typeScriptStats.stats.totalItems }}</div>
+              <div class="text-gray-400 text-xs mt-2">
+                Books: {{ typeScriptStats.stats.totalBooks }} | Podcasts: {{ typeScriptStats.stats.totalPodcasts }}
+              </div>
+            </div>
+
+            <!-- Longest Item -->
+            <div v-if="typeScriptStats.stats.longestItem" class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Longest Item</div>
+              <div class="text-white font-bold truncate">{{ typeScriptStats.stats.longestItem.title }}</div>
+              <div class="text-gray-400 text-xs mt-2">{{ typeScriptStats.stats.longestItem.durationFormatted }}</div>
+            </div>
+
+            <!-- Shortest Item -->
+            <div v-if="typeScriptStats.stats.shortestItem" class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Shortest Item</div>
+              <div class="text-white font-bold truncate">{{ typeScriptStats.stats.shortestItem.title }}</div>
+              <div class="text-gray-400 text-xs mt-2">{{ typeScriptStats.stats.shortestItem.durationFormatted }}</div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-bg border border-gray-600 rounded p-4">
+              <div class="text-gray-400 text-sm mb-1">Recent Activity</div>
+              <div class="text-white font-bold">{{ typeScriptStats.stats.itemsAddedLastWeek }} this week</div>
+              <div class="text-gray-400 text-xs mt-2">{{ typeScriptStats.stats.itemsAddedLastMonth }} this month</div>
+            </div>
+          </div>
+
+          <!-- Top Narrators (if books) -->
+          <div v-if="typeScriptStats.stats.topNarrators && typeScriptStats.stats.topNarrators.length" class="mt-4">
+            <h3 class="text-lg font-semibold mb-2">Top Narrators</h3>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div v-for="narrator in typeScriptStats.stats.topNarrators.slice(0, 5)" :key="narrator.narrator" class="bg-bg border border-gray-600 rounded p-2 text-center">
+                <div class="text-white text-sm truncate">{{ narrator.narrator }}</div>
+                <div class="text-yellow-400 text-xs font-bold">{{ narrator.count }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Languages -->
+          <div v-if="typeScriptStats.stats.languages && typeScriptStats.stats.languages.length" class="mt-4">
+            <h3 class="text-lg font-semibold mb-2">Languages</h3>
+            <div class="flex flex-wrap gap-2">
+              <div v-for="lang in typeScriptStats.stats.languages" :key="lang.language" class="bg-bg border border-gray-600 rounded px-3 py-1">
+                <span class="text-white text-sm">{{ lang.language }}</span>
+                <span class="text-yellow-400 text-xs font-bold ml-2">{{ lang.count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 text-xs text-gray-400">
+            Calculated at {{ typeScriptStats.stats.calculatedAt }} with {{ typeScriptStats.stats.calculatedWith }}
+          </div>
+        </div>
+
         <div class="flex lg:flex-row flex-wrap justify-between flex-col mt-8">
           <div class="w-80 my-6 mx-auto">
             <h1 class="text-2xl mb-4">{{ $strings.HeaderStatsTop5Genres }}</h1>
@@ -104,7 +187,8 @@ export default {
   },
   data() {
     return {
-      libraryStats: null
+      libraryStats: null,
+      typeScriptStats: null
     }
   },
   watch: {
@@ -173,6 +257,12 @@ export default {
         console.error('Failed to get library stats', err)
         var errorMsg = err.response ? err.response.data || 'Unknown Error' : 'Unknown Error'
         this.$toast.error(`Failed to get library stats: ${errorMsg}`)
+      })
+
+      // Fetch TypeScript-powered advanced statistics
+      this.typeScriptStats = await this.$axios.$get(`/api/libraries/${this.currentLibraryId}/stats-ts`).catch((err) => {
+        console.error('Failed to get TypeScript stats', err)
+        // Don't show error toast for TypeScript stats - it's optional demo feature
       })
     }
   },

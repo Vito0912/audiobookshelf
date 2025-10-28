@@ -1012,6 +1012,103 @@ class LibraryController {
   }
 
   /**
+   * GET: /api/libraries/:id/stats-ts
+   * TypeScript Demo: Get advanced library statistics using TypeScript utility
+   * This demonstrates TypeScript integration with real ABS functionality
+   *
+   * @param {LibraryControllerRequest} req
+   * @param {Response} res
+   */
+  async statsTypeScript(req, res) {
+    try {
+      // Load TypeScript-compiled library stats utility
+      const { calculateLibraryStats } = require('../../dist/server/utils/libraryStats')
+
+      // Fetch all library items with their media information
+      const libraryItems = await Database.libraryItemModel.findAll({
+        where: {
+          libraryId: req.library.id
+        },
+        include: [
+          {
+            model: Database.bookModel,
+            include: [
+              {
+                model: Database.authorModel,
+                through: {
+                  attributes: []
+                }
+              }
+            ]
+          },
+          {
+            model: Database.podcastModel
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      })
+
+      // Transform database models to match TypeScript interface
+      const items = libraryItems.map((item) => {
+        const mediaType = item.mediaType
+        let media = {}
+
+        if (mediaType === 'book' && item.book) {
+          const book = item.book
+          media = {
+            duration: book.duration || 0,
+            size: item.size || 0,
+            numAudioFiles: book.numAudioFiles || 0,
+            numChapters: book.numChapters || 0,
+            metadata: {
+              title: book.title || '',
+              author: book.authorName || '',
+              narrator: book.narratorName || '',
+              publishedYear: book.publishedYear || '',
+              language: book.language || ''
+            }
+          }
+        } else if (mediaType === 'podcast' && item.podcast) {
+          const podcast = item.podcast
+          media = {
+            duration: 0, // Podcasts calculate duration from episodes
+            size: item.size || 0,
+            numAudioFiles: 0,
+            metadata: {
+              title: podcast.title || '',
+              author: podcast.author || '',
+              language: podcast.language || ''
+            }
+          }
+        }
+
+        return {
+          id: item.id,
+          mediaType: mediaType,
+          media: media,
+          addedAt: item.createdAt ? new Date(item.createdAt).getTime() : Date.now(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt).getTime() : Date.now()
+        }
+      })
+
+      // Calculate statistics using TypeScript utility
+      const stats = calculateLibraryStats(items)
+
+      res.json({
+        success: true,
+        stats,
+        message: '✅ Statistics calculated with TypeScript!'
+      })
+    } catch (error) {
+      Logger.error('[LibraryController] Error calculating TypeScript stats:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+
+  /**
    * GET: /api/libraries/:id/authors
    * Get authors for library
    *

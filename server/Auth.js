@@ -7,7 +7,8 @@ const Database = require('./Database')
 const Logger = require('./Logger')
 const TokenManager = require('./auth/TokenManager')
 const LocalAuthStrategy = require('./auth/LocalAuthStrategy')
-const OidcAuthStrategy = require('./auth/OidcAuthStrategy')
+// Load TypeScript compiled version from dist
+const OidcAuthStrategy = require('../dist/server/auth/OidcAuthStrategy').default
 
 const RateLimiterFactory = require('./utils/rateLimiterFactory')
 const { escapeRegExp } = require('./utils')
