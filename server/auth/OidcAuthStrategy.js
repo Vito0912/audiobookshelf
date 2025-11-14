@@ -123,11 +123,6 @@ class OidcAuthStrategy {
         throw new Error(`Group claim ${Database.serverSettings.authOpenIDGroupClaim} not found or empty in userinfo`)
       }
 
-      if (global.ServerSettings.authOpenIDRequireVerifiedEmail && userinfo.email && userinfo.email_verified === false) {
-        Logger.warn(`[OidcAuth] Email verification required but email "${userinfo.email}" is not verified`)
-        return done(null, null, 'Your email is not verified')
-      }
-
       user = await Database.userModel.findUserFromOpenIdUserInfo(userinfo)
 
       if (user?.error) {
@@ -145,12 +140,22 @@ class OidcAuthStrategy {
         }
       }
 
+      if (global.ServerSettings.authOpenIDRequireVerifiedEmail && userinfo.email && userinfo.email_verified === false) {
+        Logger.warn(`[OidcAuth] Email verification required but email "${userinfo.email}" is not verified`)
+        // Because the user has proven ownership of the email via the OIDC provider, we can simply state the actual message here (to give the user a hint that it's not because of a invalid login)
+        if (isNewUser && user) {
+          await user.destroy()
+        }
+        return done(null, null, 'Your email is not verified')
+      }
+
       if (!user.isActive) {
         throw new Error('User not active or not found')
       }
 
       await this.setUserGroup(user, userinfo)
       await this.updateUserPermissions(user, userinfo)
+      await this.updateUserEmailAndUsername(user, userinfo)
 
       // We also have to save the id_token for later (used for logout) because we cannot set cookies here
       user.openid_id_token = tokenset.id_token
@@ -240,6 +245,42 @@ class OidcAuthStrategy {
 
     if (await user.updatePermissionsFromExternalJSON(absPermissions)) {
       Logger.info(`[OidcAuth] openid callback: Updating advanced perms for user "${user.username}" using "${JSON.stringify(absPermissions)}"`)
+    }
+  }
+
+  /**
+   * Updates user email and username from OpenID userinfo if they have changed.
+   * @param {import('../models/User')} user
+   * @param {Object} userinfo
+   */
+  async updateUserEmailAndUsername(user, userinfo) {
+    let hasUpdates = false
+
+    if (userinfo.email && userinfo.email_verified == true && user.email !== userinfo.email) {
+      const existingUserWithEmail = await Database.userModel.getUserByEmail(userinfo.email)
+      if (existingUserWithEmail && existingUserWithEmail.id !== user.id) {
+        Logger.warn(`[OidcAuth] openid callback: Cannot update user "${user.username}" email to "${userinfo.email}" - email already in use by another user`)
+      } else {
+        Logger.info(`[OidcAuth] openid callback: Updating user "${user.username}" email from "${user.email}" to "${userinfo.email}"`)
+        user.email = userinfo.email
+        hasUpdates = true
+      }
+    }
+
+    const newUsername = userinfo.preferred_username || userinfo.username
+    if (newUsername && user.username !== newUsername) {
+      const existingUserWithUsername = await Database.userModel.getUserByUsername(newUsername)
+      if (existingUserWithUsername && existingUserWithUsername.id !== user.id) {
+        Logger.warn(`[OidcAuth] openid callback: Cannot update user username from "${user.username}" to "${newUsername}" - username already in use by another user`)
+      } else {
+        Logger.info(`[OidcAuth] openid callback: Updating user username from "${user.username}" to "${newUsername}"`)
+        user.username = newUsername
+        hasUpdates = true
+      }
+    }
+
+    if (hasUpdates) {
+      await user.save()
     }
   }
 
