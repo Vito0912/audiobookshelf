@@ -82,6 +82,7 @@ class ServerSettings {
     this.authOpenIDGroupClaim = ''
     this.authOpenIDAdvancedPermsClaim = ''
     this.authOpenIDSubfolderForRedirectURLs = undefined
+    this.authOpenIDRequireVerifiedEmail = false
 
     if (settings) {
       this.construct(settings)
@@ -146,6 +147,7 @@ class ServerSettings {
     this.authOpenIDGroupClaim = settings.authOpenIDGroupClaim || ''
     this.authOpenIDAdvancedPermsClaim = settings.authOpenIDAdvancedPermsClaim || ''
     this.authOpenIDSubfolderForRedirectURLs = settings.authOpenIDSubfolderForRedirectURLs
+    this.authOpenIDRequireVerifiedEmail = !!settings.authOpenIDRequireVerifiedEmail
 
     if (!Array.isArray(this.authActiveAuthMethods)) {
       this.authActiveAuthMethods = ['local']
@@ -255,7 +257,8 @@ class ServerSettings {
       authOpenIDMobileRedirectURIs: this.authOpenIDMobileRedirectURIs, // Do not return to client
       authOpenIDGroupClaim: this.authOpenIDGroupClaim, // Do not return to client
       authOpenIDAdvancedPermsClaim: this.authOpenIDAdvancedPermsClaim, // Do not return to client
-      authOpenIDSubfolderForRedirectURLs: this.authOpenIDSubfolderForRedirectURLs
+      authOpenIDSubfolderForRedirectURLs: this.authOpenIDSubfolderForRedirectURLs,
+      authOpenIDRequireVerifiedEmail: this.authOpenIDRequireVerifiedEmail
     }
   }
 
@@ -302,6 +305,7 @@ class ServerSettings {
       authOpenIDGroupClaim: this.authOpenIDGroupClaim, // Do not return to client
       authOpenIDAdvancedPermsClaim: this.authOpenIDAdvancedPermsClaim, // Do not return to client
       authOpenIDSubfolderForRedirectURLs: this.authOpenIDSubfolderForRedirectURLs,
+      authOpenIDRequireVerifiedEmail: this.authOpenIDRequireVerifiedEmail,
 
       authOpenIDSamplePermissions: User.getSampleAbsPermissions()
     }

@@ -689,7 +689,7 @@ class MiscController {
         }
       } else {
         const updatedValueType = typeof settingsUpdate[key]
-        if (['authOpenIDAutoLaunch', 'authOpenIDAutoRegister'].includes(key)) {
+        if (['authOpenIDAutoLaunch', 'authOpenIDAutoRegister', 'authOpenIDRequireVerifiedEmail'].includes(key)) {
           if (updatedValueType !== 'boolean') {
             Logger.warn(`[MiscController] Invalid value for ${key}. Expected boolean`)
             continue

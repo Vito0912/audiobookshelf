@@ -99,6 +99,12 @@
               <p class="pl-4 text-sm text-gray-300">{{ $strings.LabelAutoRegisterDescription }}</p>
             </div>
 
+            <div class="flex items-center py-4 px-1 w-full">
+              <ui-toggle-switch labeledBy="require-verified-email-toggle" v-model="newAuthSettings.authOpenIDRequireVerifiedEmail" :disabled="savingSettings" />
+              <p id="require-verified-email-toggle" class="pl-4 whitespace-nowrap">{{ $strings.LabelRequireEmail }}</p>
+              <p class="pl-4 text-sm text-gray-300">{{ $strings.LabelRequireEmailDescription }}</p>
+            </div>
+
             <p class="pt-6 mb-4 px-1">{{ $strings.LabelOpenIDClaims }}</p>
 
             <div class="flex flex-col sm:flex-row mb-4">

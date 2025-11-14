@@ -123,6 +123,11 @@ class OidcAuthStrategy {
         throw new Error(`Group claim ${Database.serverSettings.authOpenIDGroupClaim} not found or empty in userinfo`)
       }
 
+      if (global.ServerSettings.authOpenIDRequireVerifiedEmail && userinfo.email && userinfo.email_verified === false) {
+        Logger.warn(`[OidcAuth] Email verification required but email "${userinfo.email}" is not verified`)
+        return done(null, null, 'Your email is not verified')
+      }
+
       user = await Database.userModel.findUserFromOpenIdUserInfo(userinfo)
 
       if (user?.error) {

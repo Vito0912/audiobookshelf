@@ -420,7 +420,8 @@ class Auth {
 
             if (!user) {
               // Info usually contains the error message from the SSO provider
-              return handleAuthError(isMobile, 401, 'Unauthorized', `[Auth] No data in openid callback - ${info}`, info?.response)
+              const errorMessage = info || 'Unauthorized'
+              return handleAuthError(isMobile, 401, errorMessage, `[Auth] No data in openid callback - ${info}`, info?.response)
             }
 
             req.logIn(user, (loginError) => {

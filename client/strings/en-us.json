@@ -561,6 +561,8 @@
   "LabelRemoveCover": "Remove cover",
   "LabelRemoveMetadataFile": "Remove metadata files in library item folders",
   "LabelRemoveMetadataFileHelp": "Remove all metadata.json and metadata.abs files in your {0} folders.",
+  "LabelRequireEmail": "Require Verified Email",
+  "LabelRequireEmailDescription": "Require users to have a verified email address if they use an email from the OpenID provider to log in. If using match by email the user must have a verified email address at the time of account creation, regardless of this setting.",
   "LabelRowsPerPage": "Rows per page",
   "LabelSearchTerm": "Search Term",
   "LabelSearchTitle": "Search Title",

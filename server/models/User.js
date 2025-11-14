@@ -231,7 +231,7 @@ class User extends Model {
       if (userinfo.email) {
         // Only disallow when email_verified explicitly set to false (allow both if not set or true)
         if (userinfo.email_verified === false) {
-          Logger.warn(`[User] openid: User not found and email "${userinfo.email}" is not verified`)
+          Logger.warn(`[User] openid: User not found and email "${userinfo.email}" is not verified. Make sure your OpenID provider is configured to return email_verified as true.`)
           return {
             error: 'Email not verified'
           }
