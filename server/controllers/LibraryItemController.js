@@ -1095,7 +1095,45 @@ class LibraryItemController {
       }
       res.setHeader('Content-Type', audioMimeType)
     }
-
+    try {
+    let isAborted = false
+    
+    // Listen for client abort
+    req.on('aborted', () => {
+      isAborted = true
+      //Logger.warn(`[LibraryItemController] Download aborted by client for "${libraryFile.metadata.path}"`)
+    })
+    
+    // Listen for connection close
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        //Logger.warn(`[LibraryItemController] Download connection closed for "${libraryFile.metadata.path}"`)
+      }
+    })
+    
+    await new Promise((resolve, reject) => {
+      res.download(libraryFile.metadata.path, libraryFile.metadata.filename, (error) => {
+        if (error) {
+          if (error.code === 'ECONNABORTED') {
+            Logger.warn(`[LibraryItemController] ignore error (ECONNABORTED) and resolve call for "${libraryFile.metadata.path}"`)
+            resolve()
+          } else {
+            reject(error)
+          }
+        } else {
+          resolve()
+        }
+      })
+    })
+    
+    if (!isAborted) {
+      Logger.info(`[LibraryItemController] Downloaded file "${libraryFile.metadata.path}"`)
+    }
+  } catch (error) {
+    Logger.error(`[LibraryItemController] Failed to download file "${libraryFile.metadata.path}"`, error)
+    LibraryItemController.handleDownloadError(error, res)
+  }
+/**
     try {
       await new Promise((resolve, reject) => res.download(libraryFile.metadata.path, libraryFile.metadata.filename, (error) => (error ? reject(error) : resolve())))
       Logger.info(`[LibraryItemController] Downloaded file "${libraryFile.metadata.path}"`)
@@ -1103,6 +1141,7 @@ class LibraryItemController {
       Logger.error(`[LibraryItemController] Failed to download file "${libraryFile.metadata.path}"`, error)
       LibraryItemController.handleDownloadError(error, res)
     }
+   */
   }
 
   /**
