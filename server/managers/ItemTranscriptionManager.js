@@ -15,7 +15,7 @@ const { filePathToPOSIX } = require('../utils/fileUtils')
 const { buildWebVtt } = require('../utils/transcription/vttBuilder')
 
 const TRANSCRIPTION_MODEL_ID = 'scribe_v2'
-const MAX_CHUNK_DURATION_SECONDS = 8 * 60 * 60
+const MAX_CHUNK_DURATION_SECONDS = 2 * 60 * 60
 const FULL_TRACK_EPSILON_SECONDS = 0.001
 
 class ItemTranscriptionManager {
@@ -135,6 +135,8 @@ class ItemTranscriptionManager {
       tagAudioEvents: !!task.data.tagAudioEvents
     }
 
+    Logger.info(`[ItemTranscriptionManager] Starting transcription for "${libraryItem.media.title}" (task ${task.id})`)
+
     const cacheDir = Path.join(this.itemsCacheDir, libraryItem.id, 'transcription')
     await fs.ensureDir(cacheDir)
     await fs.ensureDir(Path.join(cacheDir, 'chunks'))
@@ -191,11 +193,16 @@ class ItemTranscriptionManager {
       const trackHash = await this.getTrackHash(chunk.trackPath, cacheData, cacheFilePath)
       const chunkHash = this.getChunkHash(trackHash, chunk.startInTrack, chunk.duration)
 
+
       /** @type {null | {languageCode: string|null, text: string, words: Array<{text: string, start: number, end: number, type: string, speakerId: string|null}>}} */
       let transcript = cacheData.chunks?.[chunkHash]?.transcript || null
+      if (transcript?.words?.length) {
+        Logger.debug(`[ItemTranscriptionManager] Using cached transcript for chunk ${chunkHash}`)
+      }
 
       if (!transcript?.words?.length) {
         const uploadInfo = await this.getUploadSourceForChunk(chunk, chunkHash, cacheDir)
+        Logger.debug(`[ItemTranscriptionManager] Uploading chunk for transcription: ${uploadInfo.uploadPath} (chunk ${chunkHash})`)
         const response = await elevenlabs.speechToText.convert(
           {
             enableLogging: true,
@@ -232,9 +239,11 @@ class ItemTranscriptionManager {
 
       completedDuration += chunk.duration
       const progress = totalDuration > 0 ? (completedDuration / totalDuration) * 100 : 100
+      const clampedProgress = Math.max(0, Math.min(100, progress))
+      Logger.info(`[ItemTranscriptionManager] Transcription progress for "${libraryItem.media.title}": ${clampedProgress.toFixed(2)}% (task ${task.id})`)
       SocketAuthority.adminEmitter('task_progress', {
         libraryItemId: libraryItem.id,
-        progress: Math.max(0, Math.min(100, progress))
+        progress: clampedProgress
       })
     }
 
@@ -482,9 +491,9 @@ class ItemTranscriptionManager {
       ffmpeg.duration(duration)
 
       if (copyCodec) {
-        ffmpeg.outputOptions(['-vn', '-acodec copy'])
+        ffmpeg.outputOptions(['-vn', '-sn', '-dn', '-c:a copy', '-f mp4'])
       } else {
-        ffmpeg.outputOptions(['-vn', '-ac', '1', '-ar', '16000', '-c:a', 'aac', '-b:a', '64k'])
+        ffmpeg.outputOptions(['-vn', '-sn', '-dn', '-ac', '1', '-ar', '16000', '-c:a', 'aac', '-b:a', '64k'])
       }
 
       ffmpeg
