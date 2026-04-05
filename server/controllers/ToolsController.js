@@ -101,6 +101,51 @@ class ToolsController {
   }
 
   /**
+   * POST: /api/tools/item/:id/transcribe
+   * Start audiobook transcription task
+   *
+   * @this import('../routers/ApiRouter')
+   *
+   * @param {RequestWithLibraryItem} req
+   * @param {Response} res
+   */
+  async startTranscribe(req, res) {
+    if (req.libraryItem.isMissing || !req.libraryItem.hasAudioTracks || !req.libraryItem.isBook) {
+      Logger.error(`[ToolsController] startTranscribe: Invalid library item`)
+      return res.sendStatus(400)
+    }
+
+    if (this.itemTranscriptionManager.getIsLibraryItemQueuedOrProcessing(req.libraryItem.id)) {
+      Logger.error(`[ToolsController] startTranscribe: Library item (${req.libraryItem.id}) is already in queue or processing`)
+      return res.status(400).send('Library item is already in queue or processing')
+    }
+
+    const apiKey = String(req.body?.apiKey || '').trim()
+    if (!apiKey) {
+      return res.status(400).send('Missing API key')
+    }
+
+    let languageCode = null
+    if (req.body?.languageCode !== undefined && req.body?.languageCode !== null && String(req.body.languageCode).trim()) {
+      languageCode = String(req.body.languageCode).trim().toLowerCase()
+      if (!['en', 'de'].includes(languageCode)) {
+        return res.status(400).send('Unsupported language code')
+      }
+    }
+
+    const options = {
+      apiKey,
+      languageCode,
+      diarize: req.body?.diarize === true || req.body?.diarize === 'true',
+      tagAudioEvents: req.body?.tagAudioEvents === true || req.body?.tagAudioEvents === 'true'
+    }
+
+    this.itemTranscriptionManager.startTranscription(req.user.id, req.libraryItem, options)
+
+    res.sendStatus(200)
+  }
+
+  /**
    * POST: /api/tools/batch/embed-metadata
    * Start batch audiobook embed task
    *

@@ -38,6 +38,7 @@
   "author": "advplyr",
   "license": "GPL-3.0",
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.41.1",
     "axios": "^0.27.2",
     "cookie-parser": "^1.4.6",
     "express": "^4.17.1",
