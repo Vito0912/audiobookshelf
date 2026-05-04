@@ -94,13 +94,13 @@ describe('TitleCandidates', () => {
 
 describe('AuthorCandidates', () => {
   let authorCandidates
-  const audnexus = {
+  const audible = {
     authorASINsRequest: sinon.stub().resolves([{ name: 'Leo Tolstoy' }, { name: 'Nikolai Gogol' }, { name: 'J. K. Rowling' }])
   }
 
   describe('cleanAuthor is null', () => {
     beforeEach(() => {
-      authorCandidates = new bookFinder.constructor.AuthorCandidates(null, audnexus)
+      authorCandidates = new bookFinder.constructor.AuthorCandidates(null, audible)
     })
 
     describe('no adds', () => {
@@ -147,7 +147,7 @@ describe('AuthorCandidates', () => {
     const cleanAuthor = 'leo tolstoy'
 
     beforeEach(() => {
-      authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audnexus)
+      authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audible)
     })
 
     describe('no adds', () => {
@@ -175,7 +175,7 @@ describe('AuthorCandidates', () => {
     const cleanAuthor = 'Fyodor Dostoevsky'
 
     beforeEach(() => {
-      authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audnexus)
+      authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audible)
     })
 
     describe('no adds', () => {
@@ -206,7 +206,7 @@ describe('AuthorCandidates', () => {
         ['adds cleanAuthor if aggresively cleaned cleanAuthor is empty', ', jackie chan', [', jackie chan']]
       ].forEach(([name, cleanAuthor, expected]) =>
         it(name, async () => {
-          authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audnexus)
+          authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audible)
           expect(await authorCandidates.getCandidates()).to.deep.equal([...expected, ''])
         })
       )
@@ -215,7 +215,7 @@ describe('AuthorCandidates', () => {
     describe('single add', () => {
       ;[['adds recognized candidate and removes cleanAuthor', 'fyodor dostoevsky, translated by jackie chan', 'nikolai gogol', ['nikolai gogol']]].forEach(([name, cleanAuthor, author, expected]) =>
         it(name, async () => {
-          authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audnexus)
+          authorCandidates = new bookFinder.constructor.AuthorCandidates(cleanAuthor, audible)
           authorCandidates.add(author)
           expect(await authorCandidates.getCandidates()).to.deep.equal([...expected, ''])
         })
@@ -231,7 +231,7 @@ describe('search', () => {
   const r = ['book']
 
   let runSearchStub
-  let audnexusStub
+  let audibleStub
 
   beforeEach(() => {
     runSearchStub = sinon.stub(bookFinder, 'runSearch')
@@ -239,8 +239,8 @@ describe('search', () => {
     runSearchStub.withArgs(t, a).resolves(r)
     runSearchStub.withArgs(t, u).resolves(r)
 
-    audnexusStub = sinon.stub(bookFinder.audnexus, 'authorASINsRequest')
-    audnexusStub.resolves([{ name: a }])
+    audibleStub = sinon.stub(bookFinder.audible, 'authorASINsRequest')
+    audibleStub.resolves([{ name: a }])
   })
 
   afterEach(() => {

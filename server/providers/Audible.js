@@ -1,10 +1,23 @@
 const axios = require('axios').default
 const Logger = require('../Logger')
-const { isValidASIN } = require('../utils/index')
+const { isValidASIN, levenshteinDistance } = require('../utils/index')
 
 const PRODUCT_RESPONSE_GROUPS = ['contributors', 'media', 'product_attrs', 'product_desc', 'product_details', 'product_extended_attrs', 'series', 'relationships', 'category_ladders'].join(',')
 const PRODUCT_IMAGE_SIZES = '500,3200'
 const CHAPTER_RESPONSE_GROUPS = 'chapter_info'
+const AUTHOR_LOCALE_MAP = {
+  us: 'en-US',
+  ca: 'en-CA',
+  uk: 'en-GB',
+  au: 'en-AU',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  jp: 'ja-JP',
+  it: 'it-IT',
+  in: 'en-IN',
+  es: 'es-ES',
+  br: 'pt-BR'
+}
 const REQUEST_HEADERS = {
   'User-Agent': 'audiobookshelf (+https://audiobookshelf.org)',
   'Content-Type': 'application/json',
@@ -55,12 +68,192 @@ class Audible {
     return params
   }
 
-  getRequestConfig(timeout, params = {}) {
+  getAudibleExtraHeaders(region) {
+    const locale = AUTHOR_LOCALE_MAP[region || 'us']
+    return {
+      'ACCEPTED-LANGUAGE': locale,
+      'accept-language': locale
+    }
+  }
+
+  getRequestConfig(timeout, params = {}, extraHeaders = {}) {
     return {
       timeout,
-      headers: REQUEST_HEADERS,
+      headers: {
+        ...REQUEST_HEADERS,
+        ...extraHeaders
+      },
       params
     }
+  }
+
+  normalizeAuthorName(name) {
+    return String(name || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  hasSharedAuthorToken(authorA, authorB) {
+    const tokensA = new Set(authorA.split(' ').filter((token) => token.length > 2))
+    const tokensB = authorB.split(' ').filter((token) => token.length > 2)
+    return tokensB.some((token) => tokensA.has(token))
+  }
+
+  isReasonableAuthorMatch(candidateName, searchName, distance, maxLevenshtein) {
+    const normalizedCandidate = this.normalizeAuthorName(candidateName)
+    const normalizedSearch = this.normalizeAuthorName(searchName)
+    if (!normalizedCandidate || !normalizedSearch) return false
+
+    if (normalizedCandidate === normalizedSearch) return true
+    if (normalizedCandidate.includes(normalizedSearch) || normalizedSearch.includes(normalizedCandidate)) return true
+
+    if (!this.hasSharedAuthorToken(normalizedCandidate, normalizedSearch)) return false
+
+    const maxLen = Math.max(normalizedCandidate.length, normalizedSearch.length)
+    const similarity = maxLen ? 1 - distance / maxLen : 0
+    return distance <= maxLevenshtein && similarity >= 0.55
+  }
+
+  /**
+   *
+   * @param {string} name
+   * @param {string} region
+   * @param {number} [timeout] response timeout in ms
+   * @returns {Promise<{asin:string,name:string}[]>}
+   */
+  authorASINsRequest(name, region, timeout = this.#responseTimeout) {
+    if (!name) return []
+
+    region = this.normalizeRegion(region, 'authorASINsRequest')
+    if (!timeout || isNaN(timeout)) timeout = this.#responseTimeout
+
+    const url = `${this.getBaseUrl(region)}/1.0/catalog/products`
+    const queryParams = {
+      author: name,
+      num_results: '10',
+      response_groups: 'contributors'
+    }
+
+    Logger.info(`[Audible] Searching for author "${url}"`)
+    return axios
+      .get(url, this.getRequestConfig(timeout, queryParams, this.getAudibleExtraHeaders(region)))
+      .then((res) => {
+        const products = Array.isArray(res?.data?.products) ? res.data.products : []
+        const authorMap = new Map()
+
+        Logger.debug(`[Audible] Author ASIN search returned ${products.length} products for "${name}"`)
+
+        products.forEach((product) => {
+          const authors = Array.isArray(product?.authors) ? product.authors : []
+          authors.forEach((authorObj) => {
+            const asin = authorObj?.asin ? String(authorObj.asin).trim().toUpperCase() : ''
+            if (!isValidASIN(asin)) return
+
+            const authorName = authorObj?.name ? String(authorObj.name).trim() : ''
+            if (!authorName) return
+
+            if (!authorMap.has(asin)) {
+              authorMap.set(asin, {
+                asin,
+                name: authorName
+              })
+            }
+          })
+        })
+
+        return [...authorMap.values()]
+      })
+      .catch((error) => {
+        Logger.error(`[Audible] Author ASIN request failed for ${name}`, error.message)
+        return []
+      })
+  }
+
+  /**
+   *
+   * @param {string} asin
+   * @param {string} region
+   * @param {number} [timeout] response timeout in ms
+   * @returns {Promise<Object>}
+   */
+  authorRequest(asin, region, timeout = this.#responseTimeout) {
+    if (!isValidASIN(String(asin || '').toUpperCase())) {
+      Logger.error(`[Audible] Invalid ASIN ${asin}`)
+      return null
+    }
+
+    region = this.normalizeRegion(region, 'authorRequest')
+    if (!timeout || isNaN(timeout)) timeout = this.#responseTimeout
+
+    const encodedAsin = encodeURIComponent(String(asin).toUpperCase())
+    const url = `${this.getBaseUrl(region)}/1.0/catalog/contributors/${encodedAsin}`
+    const queryParams = {
+      locale: AUTHOR_LOCALE_MAP[region || 'us']
+    }
+
+    Logger.info(`[Audible] Searching for author "${url}"`)
+    return axios
+      .get(url, this.getRequestConfig(timeout, queryParams, this.getAudibleExtraHeaders(region)))
+      .then((res) => res?.data?.contributor || null)
+      .catch((error) => {
+        Logger.error(`[Audible] Author request failed for ${asin}`, error.message)
+        return null
+      })
+  }
+
+  /**
+   *
+   * @param {string} asin
+   * @param {string} region
+   * @param {number} [timeout] response timeout in ms
+   * @returns {Promise<{asin:string,description:string,image:string,name:string}>}
+   */
+  async findAuthorByASIN(asin, region, timeout = this.#responseTimeout) {
+    const author = await this.authorRequest(asin, region, timeout)
+    if (!author?.name) return null
+
+    return {
+      asin: author.contributor_id || String(asin).toUpperCase(),
+      description: author.bio || null,
+      image: author.profile_image_url || null,
+      name: author.name
+    }
+  }
+
+  /**
+   *
+   * @param {string} name
+   * @param {string} region
+   * @param {number} maxLevenshtein
+   * @param {number} [timeout] response timeout in ms
+   * @returns {Promise<{asin:string,description:string,image:string,name:string}>}
+   */
+  async findAuthorByName(name, region, maxLevenshtein = 3, timeout = this.#responseTimeout) {
+    const authorAsinObjs = await this.authorASINsRequest(name, region, timeout)
+    const normalizedSearchName = this.normalizeAuthorName(name)
+
+    let closestMatch = null
+    authorAsinObjs.forEach((authorAsinObj) => {
+      const normalizedCandidateName = this.normalizeAuthorName(authorAsinObj.name)
+      if (!normalizedCandidateName) return
+
+      authorAsinObj.levenshteinDistance = levenshteinDistance(normalizedCandidateName, normalizedSearchName)
+      if (!this.isReasonableAuthorMatch(normalizedCandidateName, normalizedSearchName, authorAsinObj.levenshteinDistance, maxLevenshtein)) return
+
+      if (!closestMatch || closestMatch.levenshteinDistance > authorAsinObj.levenshteinDistance) {
+        closestMatch = authorAsinObj
+      }
+    })
+
+    if (!closestMatch || closestMatch.levenshteinDistance > maxLevenshtein) {
+      return null
+    }
+
+    return this.findAuthorByASIN(closestMatch.asin, region, timeout)
   }
 
   extractProducts(data) {

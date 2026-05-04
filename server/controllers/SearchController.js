@@ -25,8 +25,7 @@ const providerMap = {
   'audible.it': 'Audible.it',
   'audible.in': 'Audible.in',
   'audible.es': 'Audible.es',
-  'audible.br': 'Audible.com.br',
-  audnexus: 'Audnexus'
+  'audible.br': 'Audible.com.br'
 }
 
 /**

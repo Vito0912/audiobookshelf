@@ -2,7 +2,6 @@ const OpenLibrary = require('../providers/OpenLibrary')
 const GoogleBooks = require('../providers/GoogleBooks')
 const Audible = require('../providers/Audible')
 const iTunes = require('../providers/iTunes')
-const Audnexus = require('../providers/Audnexus')
 const FantLab = require('../providers/FantLab')
 const AudiobookCovers = require('../providers/AudiobookCovers')
 const CustomProviderAdapter = require('../providers/CustomProviderAdapter')
@@ -18,7 +17,6 @@ class BookFinder {
     this.googleBooks = new GoogleBooks()
     this.audible = new Audible()
     this.iTunesApi = new iTunes()
-    this.audnexus = new Audnexus()
     this.fantLab = new FantLab()
     this.audiobookCovers = new AudiobookCovers()
     this.customProviderAdapter = new CustomProviderAdapter()
@@ -298,15 +296,15 @@ class BookFinder {
   }
 
   static AuthorCandidates = class {
-    constructor(cleanAuthor, audnexus) {
-      this.audnexus = audnexus
+    constructor(cleanAuthor, audible) {
+      this.audible = audible || new Audible()
       this.candidates = new Set()
       this.cleanAuthor = cleanAuthor
       if (cleanAuthor) this.candidates.add(cleanAuthor)
     }
 
     validateAuthor(name, region = '', maxLevenshtein = 2) {
-      return this.audnexus.authorASINsRequest(name, region).then((asins) => {
+      return this.audible.authorASINsRequest(name, region).then((asins) => {
         for (const [i, asin] of asins.entries()) {
           if (i > 10) break
           let cleanName = cleanAuthorForCompares(asin.name)
@@ -404,7 +402,7 @@ class BookFinder {
       const cleanAuthor = cleanAuthorForCompares(author)
 
       // Now run up to maxFuzzySearches fuzzy searches
-      let authorCandidates = new BookFinder.AuthorCandidates(cleanAuthor, this.audnexus)
+      let authorCandidates = new BookFinder.AuthorCandidates(cleanAuthor, this.audible)
 
       // Remove underscores and parentheses with their contents, and replace with a separator
       // Use negated character classes to prevent ReDoS vulnerability (input length validated at entry point)
