@@ -23,7 +23,7 @@ class BookFinder {
     this.audiobookCovers = new AudiobookCovers()
     this.customProviderAdapter = new CustomProviderAdapter()
 
-    this.providers = ['google', 'itunes', 'openlibrary', 'fantlab', 'audiobookcovers', 'audible', 'audible.ca', 'audible.uk', 'audible.au', 'audible.fr', 'audible.de', 'audible.jp', 'audible.it', 'audible.in', 'audible.es']
+    this.providers = ['google', 'itunes', 'openlibrary', 'fantlab', 'audiobookcovers', 'audible', 'audible.ca', 'audible.uk', 'audible.au', 'audible.fr', 'audible.de', 'audible.jp', 'audible.it', 'audible.in', 'audible.es', 'audible.br']
 
     this.verbose = false
   }
@@ -640,7 +640,7 @@ class BookFinder {
   }
 
   findChapters(asin, region) {
-    return this.audnexus.getChaptersByASIN(asin, region)
+    return this.audible.getChaptersByASIN(asin, region, this.#providerResponseTimeout)
   }
 }
 module.exports = new BookFinder()

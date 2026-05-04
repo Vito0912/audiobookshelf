@@ -2,6 +2,17 @@ const axios = require('axios').default
 const Logger = require('../Logger')
 const { isValidASIN } = require('../utils/index')
 
+const PRODUCT_RESPONSE_GROUPS = ['contributors', 'media', 'product_attrs', 'product_desc', 'product_details', 'product_extended_attrs', 'series', 'relationships', 'category_ladders'].join(',')
+const PRODUCT_IMAGE_SIZES = '500,3200'
+const CHAPTER_RESPONSE_GROUPS = 'chapter_info'
+const REQUEST_HEADERS = {
+  'User-Agent': 'audiobookshelf (+https://audiobookshelf.org)',
+  'Content-Type': 'application/json',
+  'Accept-Encoding': 'gzip',
+  'Accept-Charset': 'utf-8',
+  Accept: 'application/json'
+}
+
 class Audible {
   #responseTimeout = 10000
 
@@ -16,8 +27,204 @@ class Audible {
       jp: '.co.jp',
       it: '.it',
       in: '.in',
-      es: '.es'
+      es: '.es',
+      br: '.com.br'
     }
+  }
+
+  normalizeRegion(region, context = 'request') {
+    const cleanRegion = region ? String(region).toLowerCase() : ''
+    if (cleanRegion && !this.regionMap[cleanRegion]) {
+      Logger.error(`[Audible] ${context}: Invalid region ${region}`)
+      return ''
+    }
+    return cleanRegion
+  }
+
+  getBaseUrl(region) {
+    const tld = region ? this.regionMap[region] : '.com'
+    return `https://api.audible${tld}`
+  }
+
+  getProductQueryParams(asins = null) {
+    const params = {
+      response_groups: PRODUCT_RESPONSE_GROUPS,
+      image_sizes: PRODUCT_IMAGE_SIZES
+    }
+    if (asins) params.asins = asins
+    return params
+  }
+
+  getRequestConfig(timeout, params = {}) {
+    return {
+      timeout,
+      headers: REQUEST_HEADERS,
+      params
+    }
+  }
+
+  extractProducts(data) {
+    if (!data) return []
+    if (Array.isArray(data.products)) return data.products.filter(Boolean)
+    if (data.product) return [data.product]
+    return []
+  }
+
+  getHighestResolutionImage(product) {
+    if (product?.image) return product.image
+
+    const imageMap = product?.product_images
+    if (!imageMap || typeof imageMap !== 'object') return null
+
+    const numericSizes = Object.keys(imageMap)
+      .map((key) => Number(key))
+      .filter((size) => !isNaN(size))
+      .sort((a, b) => b - a)
+
+    if (numericSizes.length) {
+      const image = imageMap[String(numericSizes[0])]
+      return image ? String(image).replace(/\._\w+_/g, '') : null
+    }
+
+    const firstImage = Object.values(imageMap).find(Boolean)
+    return firstImage ? String(firstImage).replace(/\._\w+_/g, '') : null
+  }
+
+  extractGenresAndTags(item) {
+    if (Array.isArray(item?.genres)) {
+      const genres = [
+        ...new Set(
+          item.genres
+            .filter((g) => g?.type === 'genre')
+            .map((g) => g.name)
+            .filter(Boolean)
+        )
+      ]
+      const tags = [
+        ...new Set(
+          item.genres
+            .filter((g) => g?.type === 'tag')
+            .map((g) => g.name)
+            .filter(Boolean)
+        )
+      ]
+      return { genres, tags }
+    }
+
+    const genres = new Set()
+    const tags = new Set()
+    if (Array.isArray(item?.category_ladders)) {
+      item.category_ladders.forEach((ladderObj) => {
+        const ladder = Array.isArray(ladderObj?.ladder) ? ladderObj.ladder : []
+        ladder.forEach((node, index) => {
+          const name = node?.name?.trim?.()
+          if (!name) return
+          if (index === 0) genres.add(name)
+          else tags.add(name)
+        })
+      })
+    }
+
+    return {
+      genres: [...genres],
+      tags: [...tags]
+    }
+  }
+
+  extractSeries(item) {
+    const series = []
+
+    if (item?.seriesPrimary) {
+      series.push({
+        series: item.seriesPrimary.name,
+        sequence: this.cleanSeriesSequence(item.seriesPrimary.name, item.seriesPrimary.position || '')
+      })
+    }
+    if (item?.seriesSecondary) {
+      series.push({
+        series: item.seriesSecondary.name,
+        sequence: this.cleanSeriesSequence(item.seriesSecondary.name, item.seriesSecondary.position || '')
+      })
+    }
+
+    if (Array.isArray(item?.series)) {
+      item.series.forEach((seriesItem) => {
+        const seriesName = seriesItem?.title || seriesItem?.name
+        if (!seriesName) return
+        series.push({
+          series: seriesName,
+          sequence: this.cleanSeriesSequence(seriesName, seriesItem?.sequence || seriesItem?.position || '')
+        })
+      })
+    }
+
+    if (!series.length && String(item?.content_type || '').toLowerCase() === 'podcast' && Array.isArray(item?.relationships)) {
+      item.relationships.forEach((relation) => {
+        if (!relation?.title) return
+        series.push({
+          series: relation.title,
+          sequence: this.cleanSeriesSequence(relation.title, relation.sort || '')
+        })
+      })
+    }
+
+    return series.filter((seriesItem) => seriesItem.series)
+  }
+
+  hasFullProductDetails(product) {
+    return Boolean(product?.runtime_length_min || product?.publisher_name || product?.product_images || product?.series || product?.category_ladders)
+  }
+
+  async fetchProductsByASINs(asins, region, timeout = this.#responseTimeout) {
+    const normalizedAsins = [...new Set((Array.isArray(asins) ? asins : [asins]).filter(Boolean).map((asin) => String(asin).toUpperCase()))].filter((asin) => isValidASIN(asin))
+
+    if (!normalizedAsins.length) return []
+
+    if (normalizedAsins.length === 1) {
+      const asin = encodeURIComponent(normalizedAsins[0])
+      const url = `${this.getBaseUrl(region)}/1.0/catalog/products/${asin}`
+      Logger.debug(`[Audible] ASIN url: ${url}`)
+
+      return axios
+        .get(url, this.getRequestConfig(timeout, this.getProductQueryParams()))
+        .then((res) => this.extractProducts(res?.data))
+        .catch((error) => {
+          Logger.error('[Audible] ASIN search error', error.message)
+          return []
+        })
+    }
+
+    const url = `${this.getBaseUrl(region)}/1.0/catalog/products`
+    const asinsQuery = normalizedAsins.join(',')
+    Logger.debug(`[Audible] ASIN batch url: ${url} (${normalizedAsins.length} ASINs)`)
+
+    return axios
+      .get(url, this.getRequestConfig(timeout, this.getProductQueryParams(asinsQuery)))
+      .then((res) => this.extractProducts(res?.data))
+      .catch((error) => {
+        Logger.error('[Audible] ASIN batch search error', error.message)
+        return []
+      })
+  }
+
+  searchProducts(title, author, region, timeout = this.#responseTimeout) {
+    const url = `${this.getBaseUrl(region)}/1.0/catalog/products`
+    const queryParams = {
+      num_results: '10',
+      products_sort_by: 'Relevance',
+      title,
+      ...this.getProductQueryParams()
+    }
+    if (author) queryParams.author = author
+
+    Logger.debug(`[Audible] Search url: ${url}`)
+    return axios
+      .get(url, this.getRequestConfig(timeout, queryParams))
+      .then((res) => this.extractProducts(res?.data))
+      .catch((error) => {
+        Logger.error('[Audible] query search error', error.message)
+        return []
+      })
   }
 
   /**
@@ -40,50 +247,45 @@ class Audible {
     return updatedSequence
   }
 
-  cleanResult(item) {
-    const { title, subtitle, asin, authors, narrators, publisherName, summary, releaseDate, image, genres, seriesPrimary, seriesSecondary, language, runtimeLengthMin, formatType, isbn } = item
+  cleanResult(item, region = null) {
+    const title = item?.title
+    if (!title) return null
 
-    const series = []
-    if (seriesPrimary) {
-      series.push({
-        series: seriesPrimary.name,
-        sequence: this.cleanSeriesSequence(seriesPrimary.name, seriesPrimary.position || '')
-      })
-    }
-    if (seriesSecondary) {
-      series.push({
-        series: seriesSecondary.name,
-        sequence: this.cleanSeriesSequence(seriesSecondary.name, seriesSecondary.position || '')
-      })
-    }
+    const authors = Array.isArray(item?.authors) ? item.authors : []
+    const narrators = Array.isArray(item?.narrators) ? item.narrators : []
+    const authorNames = authors.map(({ name }) => name).filter(Boolean)
+    const narratorNames = narrators.map(({ name }) => name).filter(Boolean)
 
-    let genresCleaned = []
-    let tagsCleaned = []
-
-    if (genres && Array.isArray(genres)) {
-      genresCleaned = [...new Set(genres.filter((g) => g.type == 'genre').map((g) => g.name))]
-      tagsCleaned = [...new Set(genres.filter((g) => g.type == 'tag').map((g) => g.name))]
-    }
+    const releaseDate = item?.releaseDate || item?.release_date
+    const formatType = item?.formatType || item?.format_type
+    const runtimeLengthMin = item?.runtimeLengthMin || item?.runtime_length_min
+    const publisher = item?.publisherName || item?.publisher_name || null
+    const description = item?.summary || item?.merchandising_summary || item?.publisher_summary || null
+    const rating = typeof item?.rating === 'number' ? item.rating : item?.rating?.overall_distribution?.average_rating || null
+    const series = this.extractSeries(item)
+    const { genres, tags } = this.extractGenresAndTags(item)
+    const cover = this.getHighestResolutionImage(item)
+    const normalizedDuration = Number(runtimeLengthMin)
 
     return {
       title,
-      subtitle: subtitle || null,
-      author: authors ? authors.map(({ name }) => name).join(', ') : null,
-      narrator: narrators ? narrators.map(({ name }) => name).join(', ') : null,
-      publisher: publisherName,
-      publishedYear: releaseDate ? releaseDate.split('-')[0] : null,
-      description: summary || null,
-      cover: image,
-      asin,
-      isbn,
-      genres: genresCleaned.length ? genresCleaned : null,
-      tags: tagsCleaned.length ? tagsCleaned : null,
+      subtitle: item?.subtitle || null,
+      author: authorNames.length ? authorNames.join(', ') : null,
+      narrator: narratorNames.length ? narratorNames.join(', ') : null,
+      publisher,
+      publishedYear: releaseDate ? String(releaseDate).split('-')[0] : null,
+      description,
+      cover,
+      asin: item?.asin,
+      isbn: item?.isbn || null,
+      genres: genres.length ? genres : null,
+      tags: tags.length ? tags : null,
       series: series.length ? series : null,
-      language: language ? language.charAt(0).toUpperCase() + language.slice(1) : null,
-      duration: runtimeLengthMin && !isNaN(runtimeLengthMin) ? Number(runtimeLengthMin) : 0,
-      region: item.region || null,
-      rating: item.rating || null,
-      abridged: formatType === 'abridged'
+      language: item?.language ? item.language.charAt(0).toUpperCase() + item.language.slice(1) : null,
+      duration: !isNaN(normalizedDuration) ? normalizedDuration : 0,
+      region: item?.region || region || null,
+      rating,
+      abridged: String(formatType || '').toLowerCase() === 'abridged'
     }
   }
 
@@ -96,24 +298,9 @@ class Audible {
    */
   asinSearch(asin, region, timeout = this.#responseTimeout) {
     if (!asin) return null
+    region = this.normalizeRegion(region, 'asinSearch')
     if (!timeout || isNaN(timeout)) timeout = this.#responseTimeout
-
-    asin = encodeURIComponent(asin.toUpperCase())
-    var regionQuery = region ? `?region=${region}` : ''
-    var url = `https://api.audnex.us/books/${asin}${regionQuery}`
-    Logger.debug(`[Audible] ASIN url: ${url}`)
-    return axios
-      .get(url, {
-        timeout
-      })
-      .then((res) => {
-        if (!res?.data?.asin) return null
-        return res.data
-      })
-      .catch((error) => {
-        Logger.error('[Audible] ASIN search error', error.message)
-        return null
-      })
+    return this.fetchProductsByASINs([asin], region, timeout).then((products) => products[0] || null)
   }
 
   /**
@@ -126,48 +313,95 @@ class Audible {
    * @returns {Promise<Object[]>}
    */
   async search(title, author, asin, region, timeout = this.#responseTimeout) {
-    if (region && !this.regionMap[region]) {
-      Logger.error(`[Audible] search: Invalid region ${region}`)
-      region = ''
-    }
+    region = this.normalizeRegion(region, 'search')
     if (!timeout || isNaN(timeout)) timeout = this.#responseTimeout
 
     let items = []
-    if (asin && isValidASIN(asin.toUpperCase())) {
-      const item = await this.asinSearch(asin, region, timeout)
-      if (item) items.push(item)
+    const asinCandidates = []
+
+    if (asin && isValidASIN(String(asin).toUpperCase())) {
+      asinCandidates.push(String(asin).toUpperCase())
     }
 
-    if (!items.length && isValidASIN(title.toUpperCase())) {
-      const item = await this.asinSearch(title, region, timeout)
-      if (item) items.push(item)
+    if (!asinCandidates.length && title && isValidASIN(String(title).toUpperCase())) {
+      asinCandidates.push(String(title).toUpperCase())
     }
 
-    if (!items.length) {
-      const queryObj = {
-        num_results: '10',
-        products_sort_by: 'Relevance',
-        title: title
+    if (asinCandidates.length) {
+      items = await this.fetchProductsByASINs(asinCandidates, region, timeout)
+    } else {
+      items = await this.searchProducts(title, author, region, timeout)
+
+      if (items.length && items.some((item) => !this.hasFullProductDetails(item))) {
+        const resultAsins = items.map((item) => item?.asin).filter((itemAsin) => itemAsin && isValidASIN(String(itemAsin).toUpperCase()))
+        if (resultAsins.length) {
+          items = await this.fetchProductsByASINs(resultAsins, region, timeout)
+        }
       }
-      if (author) queryObj.author = author
-      const queryString = new URLSearchParams(queryObj).toString()
-      const tld = region ? this.regionMap[region] : '.com'
-      const url = `https://api.audible${tld}/1.0/catalog/products?${queryString}`
-      Logger.debug(`[Audible] Search url: ${url}`)
-      items = await axios
-        .get(url, {
-          timeout
-        })
-        .then((res) => {
-          if (!res?.data?.products) return null
-          return Promise.all(res.data.products.map((result) => this.asinSearch(result.asin, region, timeout)))
-        })
-        .catch((error) => {
-          Logger.error('[Audible] query search error', error.message)
-          return []
-        })
     }
-    return items.filter(Boolean).map((item) => this.cleanResult(item)) || []
+
+    return items
+      .filter(Boolean)
+      .map((item) => this.cleanResult(item, region || null))
+      .filter(Boolean)
+  }
+
+  cleanChapter(chapter) {
+    const startOffsetMs = Number(chapter?.startOffsetMs ?? chapter?.start_offset_ms ?? 0)
+    return {
+      lengthMs: Number(chapter?.lengthMs ?? chapter?.length_ms ?? 0),
+      startOffsetMs,
+      startOffsetSec: Number(chapter?.startOffsetSec ?? chapter?.start_offset_sec ?? Math.floor(startOffsetMs / 1000)),
+      title: chapter?.title || ''
+    }
+  }
+
+  normalizeChapterData(chapterInfo) {
+    const runtimeLengthMs = Number(chapterInfo?.runtimeLengthMs ?? chapterInfo?.runtime_length_ms ?? 0)
+    return {
+      brandIntroDurationMs: Number(chapterInfo?.brandIntroDurationMs ?? chapterInfo?.brand_intro_duration_ms ?? 0),
+      brandOutroDurationMs: Number(chapterInfo?.brandOutroDurationMs ?? chapterInfo?.brand_outro_duration_ms ?? 0),
+      isAccurate: Boolean(chapterInfo?.isAccurate ?? chapterInfo?.is_accurate ?? false),
+      runtimeLengthMs,
+      runtimeLengthSec: Number(chapterInfo?.runtimeLengthSec ?? chapterInfo?.runtime_length_sec ?? Math.floor(runtimeLengthMs / 1000)),
+      chapters: Array.isArray(chapterInfo?.chapters) ? chapterInfo.chapters.map((chapter) => this.cleanChapter(chapter)) : []
+    }
+  }
+
+  /**
+   *
+   * @param {string} asin
+   * @param {string} region
+   * @param {number} [timeout] response timeout in ms
+   * @returns {Promise<Object>}
+   */
+  getChaptersByASIN(asin, region, timeout = this.#responseTimeout) {
+    if (!isValidASIN(String(asin || '').toUpperCase())) {
+      Logger.error(`[Audible] Invalid ASIN ${asin}`)
+      return null
+    }
+
+    region = this.normalizeRegion(region, 'getChaptersByASIN')
+    if (!timeout || isNaN(timeout)) timeout = this.#responseTimeout
+
+    const encodedAsin = encodeURIComponent(String(asin).toUpperCase())
+    const url = `${this.getBaseUrl(region)}/1.0/content/${encodedAsin}/metadata`
+    const queryParams = {
+      response_groups: CHAPTER_RESPONSE_GROUPS
+    }
+
+    Logger.debug(`[Audible] Chapter url: ${url}`)
+    return axios
+      .get(url, this.getRequestConfig(timeout, queryParams))
+      .then((res) => {
+        const chapterInfo = res?.data?.content_metadata?.chapter_info
+        if (!chapterInfo) return null
+        return this.normalizeChapterData(chapterInfo)
+      })
+      .catch((error) => {
+        Logger.error(`[Audible] Chapter ASIN request failed for ${asin}/${region || 'us'}`, error.message)
+        return null
+      })
   }
 }
 
