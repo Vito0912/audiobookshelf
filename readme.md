@@ -29,7 +29,7 @@ Audiobookshelf is a self-hosted audiobook and podcast server.
 - Progressive Web App (PWA)
 - Chromecast support on the web app and android app
 - Fetch metadata and cover art from several sources
-- Chapter editor and chapter lookup (using [Audnexus API](https://audnex.us/))
+- Chapter editor and chapter lookup (using Audible)
 - Merge your audio files into a single m4b
 - Embed metadata and cover image into your audio files
 - Basic ebook support and ereader
@@ -200,11 +200,9 @@ Some SSL certificates like those signed by Let's Encrypt require ACME validation
 ### Synology NAS Reverse Proxy Setup (DSM 7+/Quickconnect)
 
 1. **Open Control Panel**
-
    - Navigate to `Login Portal > Advanced`.
 
 2. **General Tab**
-
    - Click `Reverse Proxy` > `Create`.
 
    | Setting            | Value          |
@@ -219,7 +217,6 @@ Some SSL certificates like those signed by Let's Encrypt require ACME validation
    | Hostname               | `<sub>.<quickconnectdomain>.synology.me` |
    | Port                   | 443                                      |
    | Access Control Profile | Leave as is                              |
-
    - Example Hostname: `audiobookshelf.mydomain.synology.me`
 
 4. **Destination Configuration**
@@ -231,7 +228,6 @@ Some SSL certificates like those signed by Let's Encrypt require ACME validation
    | Port     | 13378       |
 
 5. **Custom Header Tab**
-
    - Go to `Create > Websocket`.
    - Configure Headers (leave as is):
 

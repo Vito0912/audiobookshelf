@@ -376,7 +376,6 @@ class Audible {
     if (normalizedAsins.length === 1) {
       const asin = encodeURIComponent(normalizedAsins[0])
       const url = `${this.getBaseUrl(region)}/1.0/catalog/products/${asin}`
-      Logger.debug(`[Audible] ASIN url: ${url}`)
 
       return axios
         .get(url, this.getRequestConfig(timeout, this.getProductQueryParams()))
@@ -583,7 +582,6 @@ class Audible {
       response_groups: CHAPTER_RESPONSE_GROUPS
     }
 
-    Logger.debug(`[Audible] Chapter url: ${url}`)
     return axios
       .get(url, this.getRequestConfig(timeout, queryParams))
       .then((res) => {
