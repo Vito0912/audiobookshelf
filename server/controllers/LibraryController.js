@@ -1435,9 +1435,14 @@ class LibraryController {
     const libraryItems = await Database.libraryItemModel.findAll({
       attributes: ['id', 'libraryId', 'path', 'isFile'],
       where: {
-        id: itemIds
+        id: itemIds,
+        libraryId: req.library.id
       }
     })
+
+    if (libraryItems.length < itemIds.length) {
+      Logger.warn(`[LibraryController] User "${req.user.username}" requested ${itemIds.length} items but only ${libraryItems.length} are in library "${req.library.id}"`)
+    }
 
     Logger.info(`[LibraryController] User "${req.user.username}" requested download for items "${itemIds}"`)
 
