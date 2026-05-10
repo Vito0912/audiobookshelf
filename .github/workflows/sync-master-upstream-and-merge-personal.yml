@@ -1,0 +1,161 @@
+name: Sync master from upstream and merge into personal
+
+on:
+  push:
+    branches:
+      - personal
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-master-upstream-and-merge-personal
+  cancel-in-progress: false
+
+jobs:
+  sync-and-merge:
+    if: ${{ github.event_name != 'push' || (github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip-sync-master]')) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    env:
+      UPSTREAM_REPOSITORY: advplyr/audiobookshelf
+      TARGET_BRANCH: personal
+      SYNC_BRANCH: master
+      CONFLICT_BRANCH: conflict/master-sync
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ABS_PAT }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync master with upstream/master (hard reset)
+        run: |
+          set -euxo pipefail
+
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          else
+            git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          fi
+
+          git fetch --prune upstream "${SYNC_BRANCH}"
+          git checkout "${SYNC_BRANCH}" || git checkout -b "${SYNC_BRANCH}" "origin/${SYNC_BRANCH}"
+          git reset --hard "upstream/${SYNC_BRANCH}"
+          git push origin "${SYNC_BRANCH}" --force
+
+      - name: Merge synced master into personal
+        id: merge
+        run: |
+          set -euxo pipefail
+
+          git fetch --prune origin "${SYNC_BRANCH}" "${TARGET_BRANCH}"
+          git checkout "${TARGET_BRANCH}"
+
+          before_sha="$(git rev-parse HEAD)"
+
+          if git merge --no-ff -m "chore(sync): merge ${SYNC_BRANCH} into ${TARGET_BRANCH} [skip-sync-master]" "origin/${SYNC_BRANCH}"; then
+            after_sha="$(git rev-parse HEAD)"
+
+            if [ "${before_sha}" != "${after_sha}" ]; then
+              git push origin "${TARGET_BRANCH}"
+              echo "result=merged" >> "${GITHUB_OUTPUT}"
+            else
+              echo "result=already-up-to-date" >> "${GITHUB_OUTPUT}"
+            fi
+          else
+            git merge --abort || true
+            echo "result=conflict" >> "${GITHUB_OUTPUT}"
+
+            # Create the separate branch based on the current state of master
+            git branch -f "${CONFLICT_BRANCH}" "origin/${SYNC_BRANCH}"
+            git push origin "${CONFLICT_BRANCH}" --force
+          fi
+
+      - name: Create or update conflict PR
+        if: steps.merge.outputs.result == 'conflict'
+        uses: actions/github-script@v9
+        env:
+          PR_TITLE: personal auto merge failed
+          PR_ASSIGNEE: ${{ github.actor }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const base = process.env.TARGET_BRANCH || "personal";
+            const head = process.env.CONFLICT_BRANCH;
+            const title = process.env.PR_TITLE;
+            const assignee = process.env.PR_ASSIGNEE;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body = [
+              `Automatic merge from \`${process.env.SYNC_BRANCH}\` into \`${base}\` failed due to merge conflicts.`,
+              "",
+              `To keep the main sync branch clean, this PR has been opened from \`${head}\`, which is an exact copy of \`${process.env.SYNC_BRANCH}\`.`,
+              "**How to fix:**",
+              `1. Checkout \`${head}\``,
+              `2. Resolve conflicts with \`${base}\``,
+              "3. Push your fixes here to merge.",
+              "",
+              `Workflow run: ${runUrl}`
+            ].join("\n");
+
+            const { data: existing } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              base,
+              head: `${owner}:${head}`,
+              per_page: 1
+            });
+
+            let pr;
+            if (existing.length > 0) {
+              pr = existing[0];
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pr.number,
+                title,
+                body
+              });
+            } else {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                base,
+                head,
+                title,
+                body
+              });
+              pr = created.data;
+            }
+
+            if (assignee) {
+              try {
+                await github.rest.issues.addAssignees({
+                  owner,
+                  repo,
+                  issue_number: pr.number,
+                  assignees: [assignee]
+                });
+              } catch (error) {
+                core.warning(`Could not assign @${assignee}: ${error.message}`);
+              }
+            }
+
+            core.notice(`Conflict PR ready: ${pr.html_url}`);
+
+      - name: Fail workflow on merge conflict
+        if: steps.merge.outputs.result == 'conflict'
+        run: |
+          echo "Merge conflict detected. PR opened or updated for manual resolution."
+          exit 1
