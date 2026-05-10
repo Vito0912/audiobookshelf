@@ -10,7 +10,7 @@ on:
         required: true
         default: 'latest'
   push:
-    branches: [main, master]
+    branches: [main, master, personal]
     tags:
       - 'v*.*.*'
     # Only build when files in these directories have been changed
@@ -19,10 +19,6 @@ on:
       - server/**
       - index.js
       - package.json
-  workflow_run:
-    workflows: ["Sync master from upstream and merge into personal"]
-    types:
-      - completed
 
 jobs:
   build:
