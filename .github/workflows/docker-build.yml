@@ -22,7 +22,7 @@ on:
 
 jobs:
   build:
-    if: ${{ !contains(github.event.head_commit.message, 'skip ci') && github.repository == 'advplyr/audiobookshelf' }}
+    if: ${{ !contains(github.event.head_commit.message, 'skip ci') }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: advplyr/audiobookshelf,ghcr.io/${{ github.repository_owner }}/audiobookshelf
+          images: vito0912/audiobookshelf,ghcr.io/${{ github.repository_owner }}/audiobookshelf
           tags: |
             type=edge,branch=master
             type=semver,pattern={{version}}
