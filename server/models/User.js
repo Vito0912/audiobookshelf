@@ -4,7 +4,7 @@ const { LRUCache } = require('lru-cache')
 
 const Logger = require('../Logger')
 const SocketAuthority = require('../SocketAuthority')
-const { isNullOrNaN } = require('../utils')
+const { isNullOrNaN, isUUID } = require('../utils')
 const TokenManager = require('../auth/TokenManager')
 
 class UserCache {
@@ -54,6 +54,8 @@ class UserCache {
 const userCache = new UserCache()
 
 const { DataTypes, Model } = sequelize
+const USER_MESSAGE_CONSENT_WHITELIST_KEY = 'userMessageConsentWhitelist'
+const USER_MESSAGE_BLOCKLIST_KEY = 'userMessageBlocklist'
 
 /**
  * @typedef AudioBookmarkObject
@@ -573,6 +575,80 @@ class User extends Model {
   /** @type {string|null} */
   get authOpenIDSub() {
     return this.extraData?.authOpenIDSub || null
+  }
+
+  get userMessageConsentWhitelist() {
+    const userIds = this.extraData?.[USER_MESSAGE_CONSENT_WHITELIST_KEY]
+    if (!Array.isArray(userIds)) return []
+    return [...new Set(userIds.filter((id) => isUUID(id)))]
+  }
+
+  get userMessageBlockedUserIds() {
+    const userIds = this.extraData?.[USER_MESSAGE_BLOCKLIST_KEY]
+    if (!Array.isArray(userIds)) return []
+    return [...new Set(userIds.filter((id) => isUUID(id)))]
+  }
+
+  hasUserMessageConsentFor(userId) {
+    if (!isUUID(userId)) return false
+    return this.userMessageConsentWhitelist.includes(userId)
+  }
+
+  hasBlockedUserMessageUser(userId) {
+    if (!isUUID(userId)) return false
+    return this.userMessageBlockedUserIds.includes(userId)
+  }
+
+  async addUserMessageConsent(userId) {
+    return this.addUserMessageUserId(USER_MESSAGE_CONSENT_WHITELIST_KEY, userId)
+  }
+
+  async removeUserMessageConsent(userId) {
+    return this.removeUserMessageUserId(USER_MESSAGE_CONSENT_WHITELIST_KEY, userId)
+  }
+
+  async addUserMessageBlockedUser(userId) {
+    return this.addUserMessageUserId(USER_MESSAGE_BLOCKLIST_KEY, userId)
+  }
+
+  async removeUserMessageBlockedUser(userId) {
+    return this.removeUserMessageUserId(USER_MESSAGE_BLOCKLIST_KEY, userId)
+  }
+
+  async addUserMessageUserId(key, userId) {
+    if (!isUUID(userId)) return false
+
+    const currentUserIds = key === USER_MESSAGE_CONSENT_WHITELIST_KEY ? this.userMessageConsentWhitelist : this.userMessageBlockedUserIds
+
+    if (currentUserIds.includes(userId)) {
+      return false
+    }
+
+    this.extraData = {
+      ...(this.extraData || {}),
+      [key]: [...currentUserIds, userId]
+    }
+    this.changed('extraData', true)
+    await this.save()
+    return true
+  }
+
+  async removeUserMessageUserId(key, userId) {
+    if (!isUUID(userId)) return false
+
+    const currentUserIds = key === USER_MESSAGE_CONSENT_WHITELIST_KEY ? this.userMessageConsentWhitelist : this.userMessageBlockedUserIds
+
+    if (!currentUserIds.includes(userId)) {
+      return false
+    }
+
+    this.extraData = {
+      ...(this.extraData || {}),
+      [key]: currentUserIds.filter((id) => id !== userId)
+    }
+    this.changed('extraData', true)
+    await this.save()
+    return true
   }
 
   /**

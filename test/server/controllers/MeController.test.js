@@ -633,4 +633,186 @@ describe('MeController - IDOR Security Tests', () => {
       Database.libraryItemModel.getExpandedById.restore()
     })
   })
+
+  describe('User Message Consent Endpoints', () => {
+    const validUnknownUserId = '11111111-1111-4111-8111-111111111111'
+    let user1, user2, user3, guestUser
+
+    function createFakeRes() {
+      return {
+        sendStatus: sinon.spy(),
+        status: sinon.stub().returnsThis(),
+        send: sinon.spy(),
+        json: sinon.spy()
+      }
+    }
+
+    beforeEach(async () => {
+      user1 = await Database.userModel.create({
+        username: 'user-consent-owner',
+        pash: 'hashed_password_1',
+        type: 'user',
+        isActive: true,
+        extraData: {}
+      })
+
+      user2 = await Database.userModel.create({
+        username: 'user-consent-other',
+        pash: 'hashed_password_2',
+        type: 'user',
+        isActive: true,
+        extraData: {}
+      })
+
+      user3 = await Database.userModel.create({
+        username: 'user-consent-third',
+        pash: 'hashed_password_3',
+        type: 'user',
+        isActive: true,
+        extraData: {}
+      })
+
+      guestUser = await Database.userModel.create({
+        username: 'guest-consent-user',
+        pash: 'hashed_password_4',
+        type: 'guest',
+        isActive: true,
+        extraData: {}
+      })
+    })
+
+    it('should list consents with otherAccepted and include pending incoming requests', async () => {
+      await user1.addUserMessageConsent(user3.id)
+      await user2.addUserMessageConsent(user1.id)
+
+      const fakeReq = {
+        user: user1
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.getUserMessageConsents(fakeReq, fakeRes)
+
+      expect(fakeRes.json.calledOnce).to.be.true
+      expect(fakeRes.json.firstCall.args[0]).to.deep.equal({
+        consents: [{ userId: user3.id, otherAccepted: false }],
+        incomingRequests: [{ userId: user2.id }],
+        blockedUserIds: []
+      })
+    })
+
+    it('should include username for mutual consents only', async () => {
+      await user1.addUserMessageConsent(user2.id)
+      await user2.addUserMessageConsent(user1.id)
+
+      const fakeReq = {
+        user: user1
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.getUserMessageConsents(fakeReq, fakeRes)
+
+      expect(fakeRes.json.calledOnce).to.be.true
+      expect(fakeRes.json.firstCall.args[0]).to.deep.equal({
+        consents: [{ userId: user2.id, otherAccepted: true, username: user2.username }],
+        incomingRequests: [],
+        blockedUserIds: []
+      })
+    })
+
+    it('should add consent for a valid uuid without validating user existence', async () => {
+      const fakeReq = {
+        user: user1,
+        params: { userId: validUnknownUserId }
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.addUserMessageConsent(fakeReq, fakeRes)
+
+      expect(fakeRes.json.calledOnce).to.be.true
+      expect(fakeRes.json.firstCall.args[0]).to.deep.equal({
+        consents: [{ userId: validUnknownUserId, otherAccepted: false }],
+        incomingRequests: [],
+        blockedUserIds: []
+      })
+      expect(SocketAuthority.clientEmitter.calledOnce).to.be.true
+
+      await user1.reload()
+      expect(user1.userMessageConsentWhitelist).to.deep.equal([validUnknownUserId])
+    })
+
+    it('should remove consent by userId', async () => {
+      await user1.addUserMessageConsent(user2.id)
+
+      const fakeReq = {
+        user: user1,
+        params: { userId: user2.id }
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.removeUserMessageConsent(fakeReq, fakeRes)
+
+      expect(fakeRes.json.calledOnce).to.be.true
+      expect(fakeRes.json.firstCall.args[0]).to.deep.equal({
+        consents: [],
+        incomingRequests: [],
+        blockedUserIds: []
+      })
+      expect(SocketAuthority.clientEmitter.calledOnce).to.be.true
+
+      await user1.reload()
+      expect(user1.userMessageConsentWhitelist).to.deep.equal([])
+    })
+
+    it('should block a requester and hide their request', async () => {
+      await user2.addUserMessageConsent(user1.id)
+      await user1.addUserMessageConsent(user2.id)
+
+      const fakeReq = {
+        user: user1,
+        params: { userId: user2.id }
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.blockUserMessageConsent(fakeReq, fakeRes)
+
+      expect(fakeRes.json.calledOnce).to.be.true
+      expect(fakeRes.json.firstCall.args[0]).to.deep.equal({
+        consents: [],
+        incomingRequests: [],
+        blockedUserIds: [user2.id]
+      })
+      expect(SocketAuthority.clientEmitter.calledOnce).to.be.true
+
+      await user1.reload()
+      expect(user1.userMessageConsentWhitelist).to.deep.equal([])
+      expect(user1.userMessageBlockedUserIds).to.deep.equal([user2.id])
+    })
+
+    it('should reject invalid uuid values for consent endpoints', async () => {
+      const fakeReq = {
+        user: user1,
+        params: { userId: 'not-a-uuid' }
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.addUserMessageConsent(fakeReq, fakeRes)
+
+      expect(fakeRes.status.calledWith(400)).to.be.true
+      expect(fakeRes.send.calledWith('Invalid user id')).to.be.true
+      expect(fakeRes.json.called).to.be.false
+      expect(SocketAuthority.clientEmitter.called).to.be.false
+    })
+
+    it('should forbid guests from managing consents', async () => {
+      const fakeReq = {
+        user: guestUser
+      }
+      const fakeRes = createFakeRes()
+
+      await MeController.getUserMessageConsents(fakeReq, fakeRes)
+
+      expect(fakeRes.sendStatus.calledWith(403)).to.be.true
+      expect(fakeRes.json.called).to.be.false
+    })
+  })
 })

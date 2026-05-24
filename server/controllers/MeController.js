@@ -3,8 +3,65 @@ const Logger = require('../Logger')
 const SocketAuthority = require('../SocketAuthority')
 const Database = require('../Database')
 const { sort } = require('../libs/fastSort')
-const { toNumber, isNullOrNaN } = require('../utils/index')
+const { toNumber, isNullOrNaN, isUUID } = require('../utils/index')
 const userStats = require('../utils/queries/userStats')
+
+const canUserManageUserMessageConsents = (user) => !!(user?.isAdminOrUp || user?.isUser)
+
+/**
+ * @param {import('../models/User')} user
+ */
+const getUserMessageConsentsPayload = async (user) => {
+  const blockedUserIds = user.userMessageBlockedUserIds.slice().sort()
+  const blockedUserIdSet = new Set(blockedUserIds)
+  const consentUserIds = user.userMessageConsentWhitelist.filter((userId) => !blockedUserIdSet.has(userId))
+
+  const consentUsers = consentUserIds.length
+    ? await Database.userModel.findAll({
+        attributes: ['id', 'username', 'extraData', 'isActive'],
+        where: {
+          id: consentUserIds
+        }
+      })
+    : []
+  const consentUserMap = new Map(consentUsers.map((consentUser) => [consentUser.id, consentUser]))
+
+  const consents = consentUserIds
+    .map((userId) => {
+      const consentUser = consentUserMap.get(userId)
+      const otherAccepted = !!consentUser?.isActive && consentUser.hasUserMessageConsentFor(user.id) && !consentUser.hasBlockedUserMessageUser(user.id)
+      const payload = {
+        userId,
+        otherAccepted
+      }
+      if (otherAccepted) {
+        payload.username = consentUser.username
+      }
+      return payload
+    })
+    .sort((a, b) => a.userId.localeCompare(b.userId))
+
+  const allActiveUsers = await Database.userModel.findAll({
+    attributes: ['id', 'extraData', 'isActive'],
+    where: {
+      isActive: true
+    }
+  })
+  const incomingRequests = allActiveUsers
+    .filter((candidateUser) => candidateUser.id !== user.id)
+    .filter((candidateUser) => !blockedUserIdSet.has(candidateUser.id))
+    .filter((candidateUser) => candidateUser.hasUserMessageConsentFor(user.id))
+    .filter((candidateUser) => !candidateUser.hasBlockedUserMessageUser(user.id))
+    .filter((candidateUser) => !user.hasUserMessageConsentFor(candidateUser.id))
+    .map((candidateUser) => ({ userId: candidateUser.id }))
+    .sort((a, b) => a.userId.localeCompare(b.userId))
+
+  return {
+    consents,
+    incomingRequests,
+    blockedUserIds
+  }
+}
 
 /**
  * @typedef RequestUserObject
@@ -496,6 +553,131 @@ class MeController {
     res.json({
       ereaderDevices: Database.emailSettings.getEReaderDevices(req.user)
     })
+  }
+
+  /**
+   * GET: /api/me/user-message-consents
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async getUserMessageConsents(req, res) {
+    if (!canUserManageUserMessageConsents(req.user)) {
+      return res.sendStatus(403)
+    }
+    res.json(await getUserMessageConsentsPayload(req.user))
+  }
+
+  /**
+   * POST: /api/me/user-message-consents/:userId
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async addUserMessageConsent(req, res) {
+    if (!canUserManageUserMessageConsents(req.user)) {
+      return res.sendStatus(403)
+    }
+
+    const consentUserId = req.params.userId
+    if (!isUUID(consentUserId)) {
+      return res.status(400).send('Invalid user id')
+    }
+    if (consentUserId === req.user.id) {
+      return res.status(400).send('Cannot consent self')
+    }
+    if (req.user.hasBlockedUserMessageUser(consentUserId)) {
+      return res.status(400).send('Cannot consent blocked user')
+    }
+
+    const hasUpdated = await req.user.addUserMessageConsent(consentUserId)
+    if (hasUpdated) {
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    }
+
+    res.json(await getUserMessageConsentsPayload(req.user))
+  }
+
+  /**
+   * DELETE: /api/me/user-message-consents/:userId
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async removeUserMessageConsent(req, res) {
+    if (!canUserManageUserMessageConsents(req.user)) {
+      return res.sendStatus(403)
+    }
+
+    const consentUserId = req.params.userId
+    if (!isUUID(consentUserId)) {
+      return res.status(400).send('Invalid user id')
+    }
+    if (consentUserId === req.user.id) {
+      return res.status(400).send('Cannot revoke self')
+    }
+
+    const hasUpdated = await req.user.removeUserMessageConsent(consentUserId)
+    if (hasUpdated) {
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    }
+
+    res.json(await getUserMessageConsentsPayload(req.user))
+  }
+
+  /**
+   * POST: /api/me/user-message-consents/:userId/block
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async blockUserMessageConsent(req, res) {
+    if (!canUserManageUserMessageConsents(req.user)) {
+      return res.sendStatus(403)
+    }
+
+    const blockedUserId = req.params.userId
+    if (!isUUID(blockedUserId)) {
+      return res.status(400).send('Invalid user id')
+    }
+    if (blockedUserId === req.user.id) {
+      return res.status(400).send('Cannot block self')
+    }
+
+    const hasBlockedUpdated = await req.user.addUserMessageBlockedUser(blockedUserId)
+    const hasConsentUpdated = await req.user.removeUserMessageConsent(blockedUserId)
+    if (hasBlockedUpdated || hasConsentUpdated) {
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    }
+
+    res.json(await getUserMessageConsentsPayload(req.user))
+  }
+
+  /**
+   * DELETE: /api/me/user-message-consents/:userId/block
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async unblockUserMessageConsent(req, res) {
+    if (!canUserManageUserMessageConsents(req.user)) {
+      return res.sendStatus(403)
+    }
+
+    const blockedUserId = req.params.userId
+    if (!isUUID(blockedUserId)) {
+      return res.status(400).send('Invalid user id')
+    }
+    if (blockedUserId === req.user.id) {
+      return res.status(400).send('Cannot unblock self')
+    }
+
+    const hasUpdated = await req.user.removeUserMessageBlockedUser(blockedUserId)
+    if (hasUpdated) {
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    }
+
+    res.json(await getUserMessageConsentsPayload(req.user))
   }
 
   /**

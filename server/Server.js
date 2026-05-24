@@ -352,6 +352,7 @@ class Server {
       // server has been initialized if a root user exists
       const payload = {
         app: 'audiobookshelf',
+        compatibility: ['vito0912/transcribing', 'vito0912/websocket'],
         serverVersion: version,
         isInit: Database.hasRootUser,
         language: Database.serverSettings.language,

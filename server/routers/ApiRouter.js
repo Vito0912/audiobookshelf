@@ -190,6 +190,11 @@ class ApiRouter {
     this.router.get('/me/series/:id/readd-to-continue-listening', MeController.readdSeriesFromContinueListening.bind(this))
     this.router.get('/me/stats/year/:year', MeController.getStatsForYear.bind(this))
     this.router.post('/me/ereader-devices', MeController.updateUserEReaderDevices.bind(this))
+    this.router.get('/me/user-message-consents', MeController.getUserMessageConsents.bind(this))
+    this.router.post('/me/user-message-consents/:userId', MeController.addUserMessageConsent.bind(this))
+    this.router.delete('/me/user-message-consents/:userId', MeController.removeUserMessageConsent.bind(this))
+    this.router.post('/me/user-message-consents/:userId/block', MeController.blockUserMessageConsent.bind(this))
+    this.router.delete('/me/user-message-consents/:userId/block', MeController.unblockUserMessageConsent.bind(this))
 
     //
     // Backup Routes

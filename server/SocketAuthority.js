@@ -3,6 +3,7 @@ const Logger = require('./Logger')
 const Database = require('./Database')
 const TokenManager = require('./auth/TokenManager')
 const CoverSearchManager = require('./managers/CoverSearchManager')
+const { isUUID } = require('./utils/index')
 const { LogLevel } = require('./utils/constants')
 
 /**
@@ -246,6 +247,7 @@ class SocketAuthority {
             Logger.error(`[SocketAuthority] Non-admin user sent the message_all_users event`)
           }
         })
+        socket.on('message_user', (payload) => this.handleUserMessage(socket, payload))
         socket.on('ping', () => {
           const client = this.clients[socket.id] || {}
           const user = client.user || {}
@@ -323,6 +325,115 @@ class SocketAuthority {
       initialPayload.usersOnline = this.getUsersOnline()
     }
     client.socket.emit('init', initialPayload)
+  }
+
+  /**
+   * @param {SocketIO.Socket} socket
+   * @param {{ userId?: string, message?: string, client?: string, clientVersion?: number, clientId?: string }} payload
+   */
+  async handleUserMessage(socket, payload) {
+    const senderClient = this.clients[socket.id]
+    if (!senderClient?.user?.id) {
+      Logger.warn(`[SocketAuthority] Unauthenticated socket ${socket.id} sent message_user event`)
+      return socket.emit('user_message_error', {
+        code: 'unauthorized',
+        message: 'Unauthorized'
+      })
+    }
+
+    const senderUser = await Database.userModel.getUserById(senderClient.user.id)
+    if (!senderUser || !senderUser.isActive) {
+      Logger.warn(`[SocketAuthority] Inactive/invalid sender on socket ${socket.id} sent message_user event`)
+      return socket.emit('user_message_error', {
+        code: 'unauthorized',
+        message: 'Unauthorized'
+      })
+    }
+
+    if (!(senderUser.isAdminOrUp || senderUser.isUser)) {
+      Logger.warn(`[SocketAuthority] User "${senderUser.username}" sent message_user without permission`)
+      return socket.emit('user_message_error', {
+        code: 'forbidden',
+        message: 'Only user/admin accounts can send user messages'
+      })
+    }
+    senderClient.user = senderUser
+
+    const recipientUserId = typeof payload?.userId === 'string' ? payload.userId.trim() : ''
+    const message = typeof payload?.message === 'string' ? payload.message.trim() : ''
+    const client = typeof payload?.client === 'string' ? payload.client.trim() : ''
+    const clientVersion = typeof payload?.clientVersion === 'number' ? payload.clientVersion : null
+    const clientId = typeof payload?.clientId === 'string' ? payload.clientId.trim() : ''
+
+    if (payload?.client !== undefined && typeof payload.client !== 'string') {
+      return socket.emit('user_message_error', {
+        code: 'invalid_payload',
+        message: 'client must be a string'
+      })
+    }
+    if (payload?.clientVersion !== undefined && (!Number.isFinite(payload.clientVersion) || payload.clientVersion < 0)) {
+      return socket.emit('user_message_error', {
+        code: 'invalid_payload',
+        message: 'clientVersion must be a non-negative number'
+      })
+    }
+    if (payload?.clientId !== undefined && typeof payload.clientId !== 'string') {
+      return socket.emit('user_message_error', {
+        code: 'invalid_payload',
+        message: 'clientId must be a string'
+      })
+    }
+    if (!isUUID(recipientUserId) || !message) {
+      return socket.emit('user_message_error', {
+        code: 'invalid_payload',
+        message: 'Valid uuid userId and message are required'
+      })
+    }
+    if (message.length > 2000) {
+      return socket.emit('user_message_error', {
+        code: 'message_too_long',
+        message: 'Message is too long'
+      })
+    }
+    if (client.length > 128 || clientId.length > 128) {
+      return socket.emit('user_message_error', {
+        code: 'invalid_payload',
+        message: 'client and clientId must be <= 128 chars'
+      })
+    }
+
+    const recipientUser = await Database.userModel.getUserById(recipientUserId)
+    const isSelfMessage = recipientUser?.id === senderUser.id
+    const canDeliverMessage = !!recipientUser && recipientUser.isActive && (isSelfMessage || (senderUser.hasUserMessageConsentFor(recipientUser.id) && recipientUser.hasUserMessageConsentFor(senderUser.id) && !senderUser.hasBlockedUserMessageUser(recipientUser.id) && !recipientUser.hasBlockedUserMessageUser(senderUser.id)))
+
+    if (!canDeliverMessage) {
+      Logger.info(`[SocketAuthority] Rejected user message from "${senderUser.username}" to "${recipientUserId}" (delivery not allowed)`)
+      return socket.emit('user_message_error', {
+        code: 'delivery_not_allowed',
+        message: 'Unable to deliver message'
+      })
+    }
+
+    const userMessagePayload = {
+      message,
+      client: {
+        client,
+        clientVersion,
+        clientId
+      },
+      sender: {
+        id: senderUser.id,
+        username: senderUser.username,
+        type: senderUser.type
+      },
+      sentAt: Date.now()
+    }
+
+    this.clientEmitter(recipientUser.id, 'user_message', userMessagePayload)
+    socket.emit('user_message_sent', {
+      userId: recipientUser.id,
+      sentAt: userMessagePayload.sentAt
+    })
   }
 
   cancelScan(id) {
