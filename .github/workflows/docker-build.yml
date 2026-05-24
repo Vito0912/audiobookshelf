@@ -35,6 +35,7 @@ jobs:
         with:
           images: vito0912/audiobookshelf,ghcr.io/${{ github.repository_owner }}/audiobookshelf
           tags: |
+            type=edge,branch=personal
             type=edge,branch=master
             type=semver,pattern={{version}}
 
