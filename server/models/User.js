@@ -354,11 +354,7 @@ class User extends Model {
     if (cachedUser) return cachedUser
 
     const user = await this.findOne({
-      where: {
-        username: {
-          [sequelize.Op.like]: username
-        }
-      },
+      where: sequelize.where(sequelize.fn('lower', sequelize.col('username')), username.toLowerCase()),
       include: this.sequelize.models.mediaProgress
     })
 
@@ -379,11 +375,7 @@ class User extends Model {
     if (cachedUser) return cachedUser
 
     const user = await this.findOne({
-      where: {
-        email: {
-          [sequelize.Op.like]: email
-        }
-      },
+      where: sequelize.where(sequelize.fn('lower', sequelize.col('email')), email.toLowerCase()),
       include: this.sequelize.models.mediaProgress
     })
 
