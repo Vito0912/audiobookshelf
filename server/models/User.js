@@ -532,7 +532,14 @@ class User extends Model {
       },
       {
         sequelize,
-        modelName: 'user'
+        modelName: 'user',
+        hooks: {
+          beforeDestroy(user) {
+            if (user.type === 'root') {
+              throw new Error('Root user cannot be deleted')
+            }
+          }
+        }
       }
     )
   }
