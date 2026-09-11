@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - id: translator-credits
-        uses: audiobookshelf/get-translator-credits@v1.0.0
+        uses: audiobookshelf/get-translator-credits@v1.1.0
 
       - name: Show translator credits
         run: |
