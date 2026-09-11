@@ -1,0 +1,26 @@
+name: Prepare contributor credits
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: translator-credits
+        uses: audiobookshelf/get-translator-credits@v1
+        with:
+          token: ${{ github.token }}
+
+      - name: Show translator credits
+        run: |
+          printf '%s\\n' "${{ steps.translator-credits.outputs.credits }}"
