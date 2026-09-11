@@ -1,4 +1,4 @@
-name: Prepare contributor credits
+name: Prepare translation credits
 
 on:
   push:
