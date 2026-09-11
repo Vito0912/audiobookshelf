@@ -8,6 +8,7 @@ on:
 
 jobs:
   release-notes:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'weblate')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,10 +18,8 @@ jobs:
           fetch-depth: 0
 
       - id: translator-credits
-        uses: audiobookshelf/get-translator-credits@v1
-        with:
-          token: ${{ github.token }}
+        uses: audiobookshelf/get-translator-credits@v1.0.0
 
       - name: Show translator credits
         run: |
-          printf '%s\\n' "${{ steps.translator-credits.outputs.credits }}"
+          printf '%s\n' "${{ steps.translator-credits.outputs.credits }}"
